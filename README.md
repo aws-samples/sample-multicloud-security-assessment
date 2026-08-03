@@ -77,6 +77,9 @@ Pick the template for the cloud you want to scan and deploy it. To cover more th
 │   ├── oci-assessment-architecture.drawio # Editable architecture source
 │   ├── README.md                         # OCI deployment guide
 │   └── checks/                           # Prowler OCI checks listing
+├── inference/                            # Post-scan analysis & reporting
+│   ├── SKILL.md                          # Amazon Quick skill definition
+│   └── README.md                         # Inference skill documentation
 └── img/                                  # README architecture diagram exports
 ```
 
@@ -346,6 +349,24 @@ Enable email notifications for scan completion:
 ```
 
 Monitor progress in real-time via the [CodeBuild Console](https://console.aws.amazon.com/codesuite/codebuild/projects).
+
+## Post-Scan Analysis & Reporting
+
+After running a scan, you can generate customer-facing deliverables — an interactive HTML dashboard, executive PowerPoint deck, phased remediation plan (PDF), and IaC remediation scripts — using the inference skill.
+
+The inference skill processes Prowler output from the S3 results bucket and produces a complete set of presentation-ready artifacts suitable for sharing with customers or stakeholders.
+
+→ See **[inference/README.md](inference/README.md)** for setup and usage instructions.
+
+**Generated deliverables include:**
+
+| Artifact | Format | Description |
+| --- | --- | --- |
+| Security Dashboard | HTML | Interactive Highcharts dashboard with KPIs, severity/service charts, remediation roadmap |
+| Executive Deck | PPTX | 11-slide AWS-branded presentation |
+| Remediation Plan | PDF | Phased plan (Immediate → Short-term → Medium-term → Ongoing) |
+| IaC Scripts | YAML/HCL | CloudFormation or Terraform remediation templates |
+| Customer README | Markdown | Deployment instructions, validation checklist, re-assessment guidance |
 
 ## Cleanup / Uninstall
 
