@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AWS Assessment - Cloud Security Assessment Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/highcharts@12.1.2/highcharts.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/highcharts@12.1.2/highcharts-more.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/highcharts@12.1.2/modules/solid-gauge.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f4f6f9; color: #1F2937; }
+.header { background: #1F2937; color: #fff; padding: 24px 40px; }
+.header h1 { font-size: 22px; font-weight: 600; }
+.header .meta { font-size: 13px; opacity: 0.85; margin-top: 4px; }
+.container { max-width: 1400px; margin: 0 auto; padding: 24px 40px; }
+.kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 32px; }
+.kpi-card { background: #fff; border-radius: 8px; padding: 20px; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+.kpi-card .value { font-size: 32px; font-weight: 700; margin: 8px 0 4px; }
+.kpi-card .label { font-size: 13px; color: #666; }
+.kpi-card.critical .value { color: #d32f2f; }
+.kpi-card.high .value { color: #f57c00; }
+.kpi-card.score .value { color: #2e7d32; }
+.charts-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; margin-bottom: 32px; }
+.chart-box { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+.chart-box h3 { font-size: 15px; margin-bottom: 12px; color: #1F2937; }
+.section { margin-bottom: 32px; }
+.section h2 { font-size: 18px; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #3B82F6; }
+table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+th { background: #1F2937; color: #fff; padding: 12px 16px; text-align: left; font-size: 13px; }
+td { padding: 10px 16px; border-bottom: 1px solid #eee; font-size: 13px; }
+tr:hover td { background: #fafafa; }
+.severity-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; color: #fff; }
+.severity-critical { background: #d32f2f; }
+.severity-high { background: #f57c00; }
+.severity-medium { background: #fbc02d; color: #333; }
+.severity-low { background: #388e3c; }
+.provider-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; color: #fff; background: #3B82F6; }
+.remediation-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.rem-card { background: #fff; border-radius: 8px; padding: 16px; border-left: 4px solid #d32f2f; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+.rem-card.high { border-left-color: #f57c00; }
+.rem-card.medium { border-left-color: #fbc02d; }
+.rem-card h4 { font-size: 14px; margin-bottom: 6px; }
+.rem-card p { font-size: 12px; color: #555; }
+.roadmap { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.phase-box { background: #fff; border-radius: 8px; padding: 16px; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+.phase-box h4 { font-size: 13px; color: #1F2937; margin-bottom: 8px; }
+.phase-box .timeline { font-size: 11px; color: #3B82F6; font-weight: 600; margin-bottom: 6px; }
+.phase-box p { font-size: 12px; color: #555; }
+.compliance-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+.compliance-card { background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+.compliance-card h4 { font-size: 13px; margin-bottom: 8px; }
+.compliance-card .bar { height: 8px; background: #eee; border-radius: 4px; overflow: hidden; }
+.compliance-card .bar-fill { height: 100%; border-radius: 4px; }
+.provider-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.provider-card { background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); border-top: 4px solid #3B82F6; }
+.provider-card h4 { font-size: 15px; margin-bottom: 8px; }
+.provider-card .pmetric { font-size: 12px; color: #555; margin: 3px 0; }
+.footer { background: #1F2937; color: #fff; padding: 20px 40px; margin-top: 40px; font-size: 12px; opacity: 0.95; }
+@media (max-width: 900px) {
+  .charts-row { grid-template-columns: 1fr; }
+  .roadmap { grid-template-columns: 1fr 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>AWS Assessment - Cloud Security Assessment</h1>
+  <div class="meta">Generated: 2026-08-04 &nbsp;|&nbsp; Providers: AWS &nbsp;|&nbsp; Source: Prowler</div>
+</div>
+<div class="container">
+
+
+<div class="kpi-row">
+  <div class="kpi-card"><div class="label">Total Checks</div><div class="value">16,485</div></div>
+  <div class="kpi-card score"><div class="label">Security Score</div><div class="value">65.8%</div></div>
+  <div class="kpi-card critical"><div class="label">Critical Findings</div><div class="value">30</div></div>
+  <div class="kpi-card high"><div class="label">High Findings</div><div class="value">688</div></div>
+  <div class="kpi-card"><div class="label">Accounts Assessed</div><div class="value">2</div></div>
+</div>
+
+
+<div class="charts-row">
+  <div class="chart-box">
+    <h3>Security Score</h3>
+    <div id="gauge-chart" style="height:250px;"></div>
+  </div>
+  <div class="chart-box">
+    <h3>Findings by Severity</h3>
+    <div id="severity-chart" style="height:250px;"></div>
+  </div>
+  <div class="chart-box">
+    <h3>Top Services with Failures</h3>
+    <div id="service-chart" style="height:250px;"></div>
+  </div>
+</div>
+<script>
+Highcharts.chart('gauge-chart', {
+  chart: { type: 'solidgauge' },
+  title: null,
+  pane: {
+    center: ['50%', '70%'], size: '120%',
+    startAngle: -90, endAngle: 90,
+    background: { backgroundColor: '#EEE', innerRadius: '60%', outerRadius: '100%', shape: 'arc' }
+  },
+  yAxis: { min: 0, max: 100, stops: [[0.3, '#DF5353'], [0.6, '#DDDF0D'], [0.9, '#55BF3B']], lineWidth: 0, tickWidth: 0, minorTickInterval: null, labels: { y: 16 } },
+  series: [{ name: 'Score', data: [65.8], dataLabels: { format: '<div style="text-align:center"><span style="font-size:28px">{y}%</span></div>' } }],
+  credits: { enabled: false }
+});
+Highcharts.chart('severity-chart', {
+  chart: { type: 'pie' },
+  title: null,
+  plotOptions: { pie: { innerSize: '55%', dataLabels: { format: '{point.name}: {point.y}' } } },
+  series: [{ name: 'Findings', data: [
+    { name: 'Critical', y: 30, color: '#d32f2f' },
+    { name: 'High', y: 688, color: '#f57c00' },
+    { name: 'Medium', y: 3518, color: '#fbc02d' },
+    { name: 'Low', y: 1394, color: '#388e3c' }
+  ] }],
+  credits: { enabled: false }
+});
+Highcharts.chart('service-chart', {
+  chart: { type: 'bar' },
+  title: null,
+  xAxis: { categories: ["s3", "cloudwatch", "awslambda", "iam", "trustedadvisor", "ec2", "cloudformation", "dynamodb", "bedrock", "cognito"], labels: { style: { fontSize: '11px' } } },
+  yAxis: { title: { text: 'Failed Checks' } },
+  series: [{ name: 'Failures', data: [1848, 740, 711, 546, 215, 213, 122, 117, 108, 100], color: '#3B82F6' }],
+  legend: { enabled: false },
+  credits: { enabled: false }
+});
+</script>
+
+
+
+<div class="section">
+  <h2>Top Failed Security Checks</h2>
+  <table>
+    <thead><tr><th>Check</th><th>Provider</th><th>Service</th><th>Severity</th><th>Count</th><th>Risk</th></tr></thead>
+    <tbody><tr>
+  <td>CloudWatch log group is encrypted with an AWS KMS key</td>
+  <td>AWS</td>
+  <td>cloudwatch</td>
+  <td><span class="severity-badge severity-medium">Medium</span></td>
+  <td>496</td>
+  <td>Without a **customer-managed KMS key**, logs rely on service-managed encryption,</td>
+</tr>
+<tr>
+  <td>IAM service role prevents cross-service confused deputy atta</td>
+  <td>AWS</td>
+  <td>iam</td>
+  <td><span class="severity-badge severity-high">High</span></td>
+  <td>329</td>
+  <td>Unrestricted service-principal trust lets outsiders trigger a **cross-service co</td>
+</tr>
+<tr>
+  <td>Trusted Advisor check has no errors or warnings</td>
+  <td>AWS</td>
+  <td>trustedadvisor</td>
+  <td><span class="severity-badge severity-medium">Medium</span></td>
+  <td>215</td>
+  <td>Unaddressed **warnings/errors** can leave misconfigurations that impact CIA:
+- *</td>
+</tr>
+<tr>
+  <td>S3 bucket has MFA Delete enabled</td>
+  <td>AWS</td>
+  <td>s3</td>
+  <td><span class="severity-badge severity-medium">Medium</span></td>
+  <td>214</td>
+  <td>Without **MFA Delete**, a compromised or over-privileged identity can irrevocabl</td>
+</tr>
+<tr>
+  <td>S3 bucket has Object Lock enabled</td>
+  <td>AWS</td>
+  <td>s3</td>
+  <td><span class="severity-badge severity-low">Low</span></td>
+  <td>214</td>
+  <td>Without **Object Lock**, object versions can be deleted or overwritten, undermin</td>
+</tr>
+<tr>
+  <td>S3 bucket has cross-region replication configured to a bucke</td>
+  <td>AWS</td>
+  <td>s3</td>
+  <td><span class="severity-badge severity-low">Low</span></td>
+  <td>213</td>
+  <td>**Single-Region storage** creates an availability gap: a Regional outage, contro</td>
+</tr>
+<tr>
+  <td>S3 bucket has event notifications enabled</td>
+  <td>AWS</td>
+  <td>s3</td>
+  <td><span class="severity-badge severity-low">Low</span></td>
+  <td>201</td>
+  <td>Missing notifications leaves object and bucket changes **unseen**, weakening **i</td>
+</tr>
+<tr>
+  <td>S3 bucket has server access logging enabled</td>
+  <td>AWS</td>
+  <td>s3</td>
+  <td><span class="severity-badge severity-medium">Medium</span></td>
+  <td>192</td>
+  <td>Without access logs, object reads, writes, and deletions may go untracked, hinde</td>
+</tr>
+<tr>
+  <td>S3 bucket has server-side encryption with AWS KMS</td>
+  <td>AWS</td>
+  <td>s3</td>
+  <td><span class="severity-badge severity-medium">Medium</span></td>
+  <td>191</td>
+  <td>Without **KMS-based encryption**, data relies only on SSE-S3, reducing **confide</td>
+</tr>
+<tr>
+  <td>Lambda function Invoke API calls are recorded by CloudTrail</td>
+  <td>AWS</td>
+  <td>awslambda</td>
+  <td><span class="severity-badge severity-low">Low</span></td>
+  <td>182</td>
+  <td>Without Lambda `Invoke` data events, per-invocation accountability is lost. Adve</td>
+</tr>
+<tr>
+  <td>S3 bucket has a lifecycle configuration enabled</td>
+  <td>AWS</td>
+  <td>s3</td>
+  <td><span class="severity-badge severity-low">Low</span></td>
+  <td>180</td>
+  <td>Without lifecycle rules, objects persist indefinitely, driving costs and retaini</td>
+</tr>
+<tr>
+  <td>Lambda function is deployed inside a VPC</td>
+  <td>AWS</td>
+  <td>awslambda</td>
+  <td><span class="severity-badge severity-low">Low</span></td>
+  <td>177</td>
+  <td>Without VPC attachment, functions lack network isolation and granular egress con</td>
+</tr>
+<tr>
+  <td>Lambda function has a Dead Letter Queue configured</td>
+  <td>AWS</td>
+  <td>awslambda</td>
+  <td><span class="severity-badge severity-medium">Medium</span></td>
+  <td>177</td>
+  <td>Without a DLQ, failed asynchronous invocations are permanently lost. This harms </td>
+</tr>
+<tr>
+  <td>S3 bucket policy denies requests over insecure transport</td>
+  <td>AWS</td>
+  <td>s3</td>
+  <td><span class="severity-badge severity-medium">Medium</span></td>
+  <td>177</td>
+  <td>HTTP access exposes object data and auth details to **eavesdropping** and **man-</td>
+</tr>
+<tr>
+  <td>S3 bucket has object versioning enabled</td>
+  <td>AWS</td>
+  <td>s3</td>
+  <td><span class="severity-badge severity-medium">Medium</span></td>
+  <td>161</td>
+  <td>Without **versioning**, deletions and overwrites remove the only copy, undermini</td>
+</tr>
+</tbody>
+  </table>
+</div>
+
+
+<div class="section">
+  <h2>Compliance Framework Coverage</h2>
+  <div class="compliance-grid"><div class="compliance-card">
+  <h4>NIS2</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 6702 / 10328 (64.9%)</div>
+  <div class="bar"><div class="bar-fill" style="width:64.9%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>KISA-ISMS-P</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 60990 / 84196 (72.4%)</div>
+  <div class="bar"><div class="bar-fill" style="width:72.4%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>AWS-AI-Security-Framework</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 5685 / 9352 (60.8%)</div>
+  <div class="bar"><div class="bar-fill" style="width:60.8%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>AWS-Account-Security-Onboarding</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 1476 / 2521 (58.5%)</div>
+  <div class="bar"><div class="bar-fill" style="width:58.5%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>FedRAMP-20x-KSI-Low</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 4273 / 6086 (70.2%)</div>
+  <div class="bar"><div class="bar-fill" style="width:70.2%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>AWS-Foundational-Security-Best-Practices</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 3203 / 5662 (56.6%)</div>
+  <div class="bar"><div class="bar-fill" style="width:56.6%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>MITRE-ATTACK</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 18941 / 23079 (82.1%)</div>
+  <div class="bar"><div class="bar-fill" style="width:82.1%;background:#388e3c;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>AWS-Well-Architected-Framework-Reliability-Pillar</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 22 / 363 (6.1%)</div>
+  <div class="bar"><div class="bar-fill" style="width:6.1%;background:#d32f2f;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>CSA-CCM</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 18884 / 30719 (61.5%)</div>
+  <div class="bar"><div class="bar-fill" style="width:61.5%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>CIS</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 7197 / 11925 (60.4%)</div>
+  <div class="bar"><div class="bar-fill" style="width:60.4%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>C5</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 37011 / 61828 (59.9%)</div>
+  <div class="bar"><div class="bar-fill" style="width:59.9%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>PCI</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 46472 / 82501 (56.3%)</div>
+  <div class="bar"><div class="bar-fill" style="width:56.3%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>NIST-CSF</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 31497 / 43952 (71.7%)</div>
+  <div class="bar"><div class="bar-fill" style="width:71.7%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>FFIEC</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 8988 / 11570 (77.7%)</div>
+  <div class="bar"><div class="bar-fill" style="width:77.7%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>AWS-Foundational-Technical-Review</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 1923 / 3410 (56.4%)</div>
+  <div class="bar"><div class="bar-fill" style="width:56.4%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>SOC2</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 7351 / 11332 (64.9%)</div>
+  <div class="bar"><div class="bar-fill" style="width:64.9%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>CISA</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 5321 / 8157 (65.2%)</div>
+  <div class="bar"><div class="bar-fill" style="width:65.2%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>ISO27001</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 12384 / 18952 (65.3%)</div>
+  <div class="bar"><div class="bar-fill" style="width:65.3%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>ASD-Essential-Eight</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 4160 / 5483 (75.9%)</div>
+  <div class="bar"><div class="bar-fill" style="width:75.9%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>ENS</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 8107 / 10221 (79.3%)</div>
+  <div class="bar"><div class="bar-fill" style="width:79.3%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>NIST-800-171-Revision-2</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 16145 / 22595 (71.5%)</div>
+  <div class="bar"><div class="bar-fill" style="width:71.5%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>GxP-21-CFR-Part-11</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 5266 / 7400 (71.2%)</div>
+  <div class="bar"><div class="bar-fill" style="width:71.2%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>HIPAA</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 12514 / 18935 (66.1%)</div>
+  <div class="bar"><div class="bar-fill" style="width:66.1%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>ProwlerThreatScore</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 2750 / 3625 (75.9%)</div>
+  <div class="bar"><div class="bar-fill" style="width:75.9%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>RBI-Cyber-Security-Framework</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 2613 / 4015 (65.1%)</div>
+  <div class="bar"><div class="bar-fill" style="width:65.1%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>AWS-Well-Architected-Framework-Security-Pillar</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 6062 / 8790 (69.0%)</div>
+  <div class="bar"><div class="bar-fill" style="width:69.0%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>FedRamp-Moderate-Revision-4</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 16527 / 22308 (74.1%)</div>
+  <div class="bar"><div class="bar-fill" style="width:74.1%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>NIST-800-53-Revision-4</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 10655 / 14842 (71.8%)</div>
+  <div class="bar"><div class="bar-fill" style="width:71.8%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>Unknown</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 24846 / 34794 (71.4%)</div>
+  <div class="bar"><div class="bar-fill" style="width:71.4%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>NIST-800-53-Revision-5</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 68766 / 95145 (72.3%)</div>
+  <div class="bar"><div class="bar-fill" style="width:72.3%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>SecNumCloud</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 6090 / 9667 (63.0%)</div>
+  <div class="bar"><div class="bar-fill" style="width:63.0%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>FedRAMP-Low-Revision-4</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 5362 / 7850 (68.3%)</div>
+  <div class="bar"><div class="bar-fill" style="width:68.3%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>GDPR</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 1387 / 2272 (61.0%)</div>
+  <div class="bar"><div class="bar-fill" style="width:61.0%;background:#f57c00;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>GxP-EU-Annex-11</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 779 / 2568 (30.3%)</div>
+  <div class="bar"><div class="bar-fill" style="width:30.3%;background:#d32f2f;"></div></div>
+</div>
+<div class="compliance-card">
+  <h4>AWS-Audit-Manager-Control-Tower-Guardrails</h4>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: 368 / 556 (66.2%)</div>
+  <div class="bar"><div class="bar-fill" style="width:66.2%;background:#f57c00;"></div></div>
+</div>
+</div>
+</div>
+
+
+<div class="section">
+  <h2>Remediation Priorities</h2>
+  <div class="remediation-cards"><div class="rem-card medium">
+  <h4>CloudWatch log group is encrypted with an AWS KMS </h4>
+  <p><strong>cloudwatch</strong> - Medium</p>
+  <p>Associate each log group with a **customer-managed KMS key** via `kmsKeyId`.
+- Enforce **least privilege** in key and IA</p>
+</div>
+<div class="rem-card high">
+  <h4>IAM service role prevents cross-service confused d</h4>
+  <p><strong>iam</strong> - High</p>
+  <p>Constrain service-role trust to expected callers using `aws:SourceArn`/`aws:SourceAccount` to bind service principals to</p>
+</div>
+<div class="rem-card medium">
+  <h4>Trusted Advisor check has no errors or warnings</h4>
+  <p><strong>trustedadvisor</strong> - Medium</p>
+  <p>Adopt a continuous process to remediate Trusted Advisor findings:
+- Prioritize **`error`** then `warning`
+- Assign owner</p>
+</div>
+<div class="rem-card medium">
+  <h4>S3 bucket has MFA Delete enabled</h4>
+  <p><strong>s3</strong> - Medium</p>
+  <p>Enable **MFA Delete** on sensitive, versioned buckets so permanent deletions and `Versioning` changes require a second f</p>
+</div>
+<div class="rem-card ">
+  <h4>S3 bucket has Object Lock enabled</h4>
+  <p><strong>s3</strong> - Low</p>
+  <p>Enable **Object Lock** for critical data and set appropriate default retention in `GOVERNANCE` or `COMPLIANCE` mode.
+
+Ap</p>
+</div>
+<div class="rem-card ">
+  <h4>S3 bucket has cross-region replication configured </h4>
+  <p><strong>s3</strong> - Low</p>
+  <p>Enable **CRR** to a different Region with `versioning` and least-privilege roles.
+
+- Replicate needed prefixes and metad</p>
+</div>
+<div class="rem-card ">
+  <h4>S3 bucket has event notifications enabled</h4>
+  <p><strong>s3</strong> - Low</p>
+  <p>Enable **S3 event notifications** for relevant events (e.g., `s3:ObjectCreated:*`, `s3:ObjectRemoved:*`) and route to co</p>
+</div>
+<div class="rem-card medium">
+  <h4>S3 bucket has server access logging enabled</h4>
+  <p><strong>s3</strong> - Medium</p>
+  <p>Enable **server access logging** and send logs to a dedicated log bucket with least privilege, retention, and monitoring</p>
+</div>
+<div class="rem-card medium">
+  <h4>S3 bucket has server-side encryption with AWS KMS</h4>
+  <p><strong>s3</strong> - Medium</p>
+  <p>Enable default **SSE-KMS** (or **DSSE-KMS** for highly sensitive data). Use a customer-managed key, enforce **least priv</p>
+</div>
+</div>
+</div>
+
+
+<div class="section">
+  <h2>Phased Remediation Roadmap</h2>
+  <div class="roadmap">
+    <div class="phase-box">
+      <div class="timeline">Day 1-3</div>
+      <h4>Immediate</h4>
+      <p>Critical: MFA/strong auth, public access, exposed secrets, privileged keys</p>
+    </div>
+    <div class="phase-box">
+      <div class="timeline">Week 1-2</div>
+      <h4>Short-Term</h4>
+      <p>High: Encryption, logging, network rules, identity policies</p>
+    </div>
+    <div class="phase-box">
+      <div class="timeline">Month 1</div>
+      <h4>Medium-Term</h4>
+      <p>Medium: Best practices, compliance gaps, monitoring</p>
+    </div>
+    <div class="phase-box">
+      <div class="timeline">Ongoing</div>
+      <h4>Continuous</h4>
+      <p>Low + Governance: Periodic scans, policy-as-code, threat detection</p>
+    </div>
+  </div>
+</div>
+
+
+</div><!-- end container -->
+<div class="footer">
+  <p><strong>Shared Responsibility:</strong> Cloud security is a shared responsibility between the cloud provider and the customer. The provider secures the underlying cloud infrastructure; the customer secures their workloads, data, identities, and configurations in the cloud.</p>
+  <p style="margin-top:8px;">Data source: Prowler Security Assessment | Providers: AWS | Scan date: 2026-08-04 | Accounts: Scope A, Scope B</p>
+</div>
+</body>
+</html>
