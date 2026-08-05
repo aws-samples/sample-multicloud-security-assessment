@@ -8,7 +8,14 @@ Terraform is the single IaC language for all clouds. The correct provider block
 Usage:
     python3 generate_iac.py <analysis_json> <selections> <output_dir> [--provider <aws|azure|gcp|oci>]
 
-    selections: comma-separated remediation IDs. Provider-appropriate options:
+    selections: comma-separated remediation IDs. You may use either PROVIDER-NEUTRAL
+    capability names (recommended in docs/menus) or PROVIDER-SPECIFIC catalog keys.
+
+    Provider-neutral names (resolved to the right key per detected provider):
+        object_storage_public_access, identity_mfa, network_ingress,
+        disk_db_encryption, audit_logging, flow_logs, key_management
+
+    Provider-specific catalog keys:
         aws:   s3_public_access, iam_mfa, security_groups, encryption_at_rest,
                audit_logging, flow_logs, kms_rotation
         azure: storage_secure, entra_mfa, nsg_restrict, disk_sql_encryption,
@@ -419,59 +426,211 @@ def load_analysis(path: str) -> dict:
         return json.load(fh)
 
 
-def _tags_locals(customer: str, provider: str) -> str:
-    """Return a locals block with tags/labels appropriate to the provider."""
+# All variables that resource bodies may reference, per provider. Declared ONCE in
+# a shared variables.tf so multiple selected modules never redeclare them, and no
+# resource references an undeclared variable. Format: name -> (hcl_type, default_or_None, description)
+PROVIDER_VARIABLES = {
+    "aws": {
+        "region": ("string", "us-east-1", "Target AWS region."),
+        "bucket_name": ("string", "", "Target S3 bucket name (for encryption config)."),
+        "kms_key_arn": ("string", "", "KMS key ARN for encryption at rest."),
+        "vpc_id": ("string", "", "VPC ID for security group / flow logs."),
+        "allowed_cidr": ("string", "10.0.0.0/8", "Allowed ingress CIDR (no 0.0.0.0/0)."),
+        "log_bucket_name": ("string", "", "S3 bucket name for CloudTrail logs."),
+        "flow_log_role_arn": ("string", "", "IAM role ARN for VPC flow logs."),
+    },
+    "azure": {
+        "location": ("string", "eastus", "Azure location."),
+        "resource_group_name": ("string", "", "Azure resource group name."),
+        "storage_account_name": ("string", "", "Storage account name."),
+        "key_vault_name": ("string", "", "Key Vault name."),
+        "tenant_id": ("string", "", "Entra ID tenant ID."),
+        "subscription_id": ("string", "", "Azure subscription resource ID."),
+        "sql_server_id": ("string", "", "Azure SQL server resource ID."),
+        "log_analytics_workspace_id": ("string", "", "Log Analytics workspace ID."),
+    },
+    "gcp": {
+        "project_id": ("string", None, "GCP project ID."),
+        "region": ("string", "us-central1", "GCP region."),
+        "bucket_name": ("string", "", "Cloud Storage bucket name."),
+        "network": ("string", "default", "VPC network name."),
+        "allowed_cidr": ("string", "10.0.0.0/8", "Allowed ingress CIDR (no 0.0.0.0/0)."),
+        "key_ring_id": ("string", "", "KMS key ring ID."),
+        "permissions": ("list(string)", [], "Custom role permissions."),
+    },
+    "oci": {
+        "region": ("string", "us-ashburn-1", "OCI region."),
+        "tenancy_ocid": ("string", None, "OCI tenancy OCID."),
+        "compartment_ocid": ("string", "", "Compartment OCID."),
+        "bucket_name": ("string", "", "Object Storage bucket name."),
+        "namespace": ("string", "", "Object Storage namespace."),
+        "vcn_id": ("string", "", "VCN OCID."),
+        "allowed_cidr": ("string", "10.0.0.0/8", "Allowed ingress CIDR (no 0.0.0.0/0)."),
+        "kms_key_id": ("string", "", "Vault key OCID for volume encryption."),
+        "management_endpoint": ("string", "", "Vault management endpoint."),
+        "availability_domain": ("string", "", "Availability domain."),
+        "policy_statements": ("list(string)", [], "IAM policy statements."),
+    },
+}
+
+
+def _hcl_default(value):
+    """Render a Python default as an HCL literal for a variable default."""
+    if value is None:
+        return None  # required variable, no default
+    if isinstance(value, list):
+        return "[]" if not value else "[" + ", ".join(f'"{v}"' for v in value) + "]"
+    return f'"{value}"'
+
+
+def _render_variables_tf(provider: str, customer: str) -> str:
+    """Build the shared variables.tf declaring every variable the modules may use."""
+    lines = [
+        "# Shared variable declarations for all remediation modules in this directory.",
+        "# Declared once here so modules never redeclare them. Fill values in terraform.tfvars.",
+        "",
+    ]
+    # environment + name_prefix are common to every provider
+    common = {
+        "environment": ("string", "production", "Deployment environment tag/label."),
+        "name_prefix": ("string", customer.lower().replace(" ", "-"), "Prefix for resource names."),
+    }
+    allvars = {**common, **PROVIDER_VARIABLES.get(provider, {})}
+    for name, (vtype, default, desc) in allvars.items():
+        block = [f'variable "{name}" {{', f'  type        = {vtype}', f'  description = "{desc}"']
+        d = _hcl_default(default)
+        if d is not None:
+            block.append(f"  default     = {d}")
+        block.append("}")
+        lines.append("\n".join(block))
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _render_tfvars_example(provider: str, customer: str) -> str:
+    """Build a single terraform.tfvars.example covering all variables."""
+    lines = [
+        "# Example variables — copy to terraform.tfvars and fill in real values.",
+        "# Variables with a sensible default may be omitted.",
+        "",
+        'environment = "production"',
+        f'name_prefix = "{customer.lower().replace(" ", "-")}"',
+    ]
+    for name, (vtype, default, desc) in PROVIDER_VARIABLES.get(provider, {}).items():
+        if vtype.startswith("list"):
+            example = "[]"
+        else:
+            example = f'"{default}"' if default else '"REPLACE_ME"'
+        marker = "" if default not in (None, "") else "   # REQUIRED"
+        lines.append(f'{name} = {example}{marker}')
+    return "\n".join(lines) + "\n"
+
+
+def _render_locals_tf(customer: str, provider: str) -> str:
+    """Shared locals.tf with tags/labels appropriate to the provider."""
     key = "labels" if provider == "gcp" else "tags"
     return (
+        "# Shared tags/labels applied by the remediation modules.\n"
         f'locals {{\n  {key} = {{\n'
         f'    Environment = var.environment\n'
         f'    ManagedBy   = "Terraform"\n'
         f'    Purpose     = "SecurityRemediation"\n'
         f'    Customer    = "{customer}"\n'
-        f'  }}\n}}'
+        f'  }}\n}}\n'
     )
 
 
+# Map provider-NEUTRAL capability names (used in docs / the interactive menu) to the
+# provider-SPECIFIC catalog keys. This lets users pass either form. Each neutral name
+# maps to the right key per provider.
+NEUTRAL_ALIASES = {
+    "object_storage_public_access": {"aws": "s3_public_access", "azure": "storage_secure",
+                                     "gcp": "gcs_public_access", "oci": "object_storage_visibility"},
+    "identity_mfa": {"aws": "iam_mfa", "azure": "entra_mfa", "gcp": "iam_least_privilege",
+                     "oci": "iam_policy"},
+    "network_ingress": {"aws": "security_groups", "azure": "nsg_restrict",
+                        "gcp": "firewall_restrict", "oci": "security_lists"},
+    "disk_db_encryption": {"aws": "encryption_at_rest", "azure": "disk_sql_encryption",
+                           "gcp": "cmek_encryption", "oci": "volume_db_encryption"},
+    "audit_logging": {"aws": "audit_logging", "azure": "activity_log", "gcp": "audit_logs",
+                      "oci": "audit_logging"},
+    "flow_logs": {"aws": "flow_logs", "azure": "activity_log", "gcp": "audit_logs",
+                  "oci": "audit_logging"},
+    "key_management": {"aws": "kms_rotation", "azure": "keyvault_protection",
+                       "gcp": "kms_rotation", "oci": "vault_rotation"},
+}
+
+
+def normalize_selection(sel: str, provider: str, catalog: dict) -> str:
+    """Resolve a selection ID to a valid catalog key for the provider.
+
+    Accepts either a provider-specific key (returned as-is if valid) or a
+    provider-neutral capability name (mapped via NEUTRAL_ALIASES). Returns the
+    resolved key, or "" if it cannot be resolved for this provider.
+    """
+    if sel in catalog:
+        return sel
+    mapped = NEUTRAL_ALIASES.get(sel, {}).get(provider)
+    if mapped and mapped in catalog:
+        return mapped
+    return ""
+
+
 def generate_terraform(customer: str, provider: str, selections: list, output_dir: str):
-    """Generate provider-aware Terraform modules (one .tf per selection)."""
+    """Generate provider-aware Terraform for a directory.
+
+    Emits SHARED files (providers.tf, variables.tf, locals.tf, terraform.tfvars.example)
+    exactly once, and one resource-only .tf per selected remediation. This avoids
+    duplicate variable/locals declarations and undeclared-variable errors when
+    Terraform loads every .tf in the directory together.
+    """
     provider = provider if provider in REMEDIATION_CATALOG else "aws"
     catalog = REMEDIATION_CATALOG[provider]
     tf_meta = PROVIDER_TF[provider]
-    generated = []
+    os.makedirs(output_dir, exist_ok=True)
 
-    for sel in selections:
-        entry = catalog.get(sel)
-        if not entry:
-            print(f"  [WARN] No {provider} Terraform template for: {sel}", file=sys.stderr)
-            continue
+    # Resolve each selection (accepts provider-neutral names or provider-specific keys),
+    # then validate. Fail loudly on unknown IDs rather than silently skipping.
+    resolved = [(s, normalize_selection(s, provider, catalog)) for s in selections]
+    valid = [r for (_s, r) in resolved if r]
+    unknown = [s for (s, r) in resolved if not r]
+    # de-dupe while preserving order (neutral aliases can collapse to same key)
+    seen = set(); valid = [v for v in valid if not (v in seen or seen.add(v))]
+    if unknown:
+        print(f"  [ERROR] Unknown {provider} remediation ID(s): {', '.join(unknown)}", file=sys.stderr)
+        print(f"          Valid {provider} IDs: {', '.join(catalog.keys())}", file=sys.stderr)
+    if not valid:
+        print(f"  [ERROR] No valid remediation selections for provider '{provider}'. Nothing generated.", file=sys.stderr)
+        return []
 
-        header = (
-            f"{DISCLAIMER}\n"
+    # --- Shared files (written once) ---
+    with open(os.path.join(output_dir, "providers.tf"), "w", encoding="utf-8") as fh:
+        fh.write(f"{DISCLAIMER}\n"
+                 f"# Shared provider + terraform settings for the remediation modules.\n\n"
+                 'terraform {\n  required_version = ">= 1.5"\n}\n\n'
+                 f"{tf_meta['provider_block']}\n")
+    with open(os.path.join(output_dir, "variables.tf"), "w", encoding="utf-8") as fh:
+        fh.write(_render_variables_tf(provider, customer) + "\n")
+    with open(os.path.join(output_dir, "locals.tf"), "w", encoding="utf-8") as fh:
+        fh.write(_render_locals_tf(customer, provider))
+    with open(os.path.join(output_dir, "terraform.tfvars.example"), "w", encoding="utf-8") as fh:
+        fh.write(_render_tfvars_example(provider, customer))
+
+    # --- One resource-only module file per selection ---
+    generated = ["providers.tf", "variables.tf", "locals.tf", "terraform.tfvars.example"]
+    for sel in valid:
+        entry = catalog[sel]
+        content = (
             f"# {customer} — {entry['title']}\n"
-            f"# {entry['description']}\n\n"
-            'terraform {\n  required_version = ">= 1.5"\n}\n\n'
-            f"{tf_meta['provider_block']}\n\n"
-            f"{tf_meta['region_var']}\n\n"
-            'variable "environment" {\n  type    = string\n  default = "production"\n}\n\n'
-            'variable "name_prefix" {\n  type    = string\n  default = "'
-            f"{customer.lower().replace(' ', '-')}"
-            '"\n}\n\n'
-            f"{_tags_locals(customer, provider)}\n\n"
+            f"# {entry['description']}\n"
+            f"# Variables are declared in variables.tf; providers/locals are shared.\n\n"
+            f"{entry['body'](customer, 'production')}\n"
         )
-        body = entry["body"](customer, "production")
-        content = header + body + "\n"
-
         filename = f"{customer.replace(' ', '_')}_{provider}_{sel}.tf"
-        filepath = os.path.join(output_dir, filename)
-        with open(filepath, "w", encoding="utf-8") as fh:
+        with open(os.path.join(output_dir, filename), "w", encoding="utf-8") as fh:
             fh.write(content)
         generated.append(filename)
         print(f"  ✓ {filename}")
-
-        # Example tfvars
-        tfvars = os.path.join(output_dir, f"{customer.replace(' ', '_')}_{provider}_{sel}.tfvars.example")
-        with open(tfvars, "w", encoding="utf-8") as fh:
-            fh.write(f'# Example variables for {entry["title"]}\nenvironment = "production"\n')
 
     return generated
 

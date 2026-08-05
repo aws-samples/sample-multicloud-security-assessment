@@ -112,11 +112,11 @@ def generate_readme(data: dict, output_path: str):
     s.append(f"| ℹ️ Low | {severity['low']} | Ongoing |")
     s.append("")
 
-    if len(providers) > 1 and data.get("findings_by_provider"):
+    if len(providers) > 1 and data.get("summary", {}).get("findings_by_provider"):
         s.append("### By Cloud Provider\n")
         s.append("| Provider | Checks | Failed | Score |")
         s.append("|----------|--------|--------|-------|")
-        for pk, pv in data["findings_by_provider"].items():
+        for pk, pv in data["summary"]["findings_by_provider"].items():
             s.append(f"| {pv.get('label', pk)} | {pv.get('total_checks','-')} | "
                      f"{pv.get('fail_count','-')} | {pv.get('security_score','-')}% |")
         s.append("")

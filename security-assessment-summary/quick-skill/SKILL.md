@@ -132,7 +132,7 @@ Prefer the **richest available source** per scan. Read at least one of the follo
 - **Tool**: `run_python`
 - **Input**: Structured data from Step 3 + the `anonymize` choice and `{real_id -> masked_label}` mapping from Step 1
 - **Output**: A single canonical dataset where, if `anonymize=true`, EVERY occurrence of a real account/subscription/project/tenancy identifier (and any embedded resource ARNs/URIs that reveal them) is replaced with the stable masked label
-- **How**: Build the mapping from all distinct scope identifiers discovered in Step 2/3. Apply it to: scope lists, per-scope tables, `resource_id`/`RESOURCE_UID` fields, any identifiers inside `risk`/`remediation` text, and file-name prefixes. Persist the mapping to a scratch file (e.g. `anon_map.json` in your working area) for the Step 10 verification gate.
+- **How**: Build the mapping from all distinct scope identifiers discovered in Step 2/3. Apply it to: scope lists, per-scope tables, `resource_id`/`RESOURCE_UID` fields, any identifiers inside `risk`/`remediation` text, and file-name prefixes. Persist the real->label mapping to an operator-only sidecar (`anon_map.json` in your working area) for the Step 10 verification gate. This sidecar is NOT part of the customer deliverables. The shipped `analysis.json` and all generated artifacts must contain ONLY the generic labels (e.g. `Scope A`) — never the real identifiers, and never the reverse label->real mapping.
 - **Rule**: All later steps consume this canonical dataset ONLY — they must never re-read raw identifiers from source files.
 
 ### Step 4: Generate HTML Dashboard
@@ -260,7 +260,7 @@ Plan structure:
 - **Tool**: `run_python` (verification) + `open_in_session_tab`
 
 **Anonymization verification gate (if `anonymize=true`):** Before presenting results, scan every generated artifact for leaked identifiers:
-- Load the persisted `anon_map.json`. For each real identifier, grep the text content of the HTML, README, PDF (extracted text), the PPTX (unzip and scan slide XML), and every Terraform file in `iac/`.
+- Load the persisted `anon_map.json` (operator-side only — it holds the real->label mapping and is NEVER shipped to the customer). For each real identifier, grep the text content of the HTML, README, PDF (extracted text), the PPTX (unzip and scan slide XML), every Terraform file in `iac/`, **and the intermediate `analysis.json`** (the data file the generators consume). Do NOT store the reverse (label->real) mapping in `analysis.json` — keep only the generic labels there; the real->label mapping belongs solely in `anon_map.json`.
 - If ANY real identifier is found, fix the source data/mapping and regenerate the affected artifact(s). Do not present until the scan is clean.
 - Report the verification result to the user (e.g. "Anonymization verified across all artifacts — 0 leaked identifiers").
 
@@ -276,8 +276,11 @@ Then open the HTML dashboard + PPTX deck and present a summary with links.
 ├── {Customer}_README.md                                 # Usage guide
 ├── {Customer}_Security_Remediation_Plan.pdf             # Phased plan (neutral branding, charts embedded)
 └── iac/
-    ├── {Customer}_<remediation>.tf                      # Terraform module (provider-appropriate)
-    ├── {Customer}_<remediation>.tfvars.example          # Example variables
+    ├── providers.tf                                     # Shared provider + terraform block
+    ├── variables.tf                                     # All variable declarations (shared)
+    ├── locals.tf                                        # Shared tags/labels
+    ├── terraform.tfvars.example                         # One example tfvars for all modules
+    ├── {Customer}_<provider>_<remediation>.tf           # Resource-only module (provider-appropriate)
     └── ... (per user selection)
 ```
 
@@ -307,7 +310,7 @@ All generated **Terraform** modules MUST adhere to these standards (apply the eq
 - Resource names: `{customer}-{purpose}`; consistent, lowercase where the provider requires
 
 ### 6. README + Variable Input Files
-- Generate `terraform.tfvars.example` per module
+- Generate ONE shared `terraform.tfvars.example` covering all modules (variables declared once in `variables.tf`)
 
 ### 7. Pre-flight Validation
 - `terraform init`, `terraform validate`, `tflint` instructions in README

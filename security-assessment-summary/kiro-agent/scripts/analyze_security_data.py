@@ -117,6 +117,28 @@ def detect_scope_ids(folder_path: str) -> list:
     return sorted(scope_ids)
 
 
+def _is_compliance_json(filepath: Path) -> bool:
+    """True if a .json is a per-framework compliance export rather than a main
+    OCSF findings file. Detected by a compliance/ path or a framework-suffixed stem
+    (the main per-scan file is exactly prowler-output-<id>-<ts>.ocsf.json — no extra
+    _<framework> segment before the extension)."""
+    name = filepath.name
+    if "compliance" in str(filepath).lower():
+        return True
+    stem = name
+    for ext in (".ocsf.json", ".json"):
+        if stem.lower().endswith(ext):
+            stem = stem[: -len(ext)]
+            break
+    # Main scan stems look like: prowler-output-<scope>-<14-digit-timestamp>
+    # A compliance file appends _<framework> after the timestamp.
+    import re as _re
+    m = _re.search(r"-(\d{14})(.+)$", stem)
+    if m and m.group(2):  # extra text after the timestamp -> framework-specific
+        return True
+    return False
+
+
 def identify_files(folder_path: str) -> dict:
     """Categorize files in the input folder by type."""
     result = {
@@ -144,11 +166,23 @@ def identify_files(folder_path: str) -> dict:
         elif name_lower.endswith(".html") or name_lower.endswith(".htm"):
             result["prowler_html"].append(str(f))
         elif name_lower.endswith(".json"):
-            category = _classify_json(f)
-            if category == "security_hub":
-                result["security_hub_json"].append(str(f))
+            # A .json is a MAIN OCSF findings export only if it is the plain per-scan
+            # file (prowler-output-<id>-<ts>.ocsf.json). Prowler also emits per-FRAMEWORK
+            # OCSF/JSON compliance files (…_<framework>.ocsf.json) and places compliance
+            # outputs under a compliance/ folder — those must NOT be treated as main
+            # findings (doing so double-counts and injects an 'unknown' provider bucket).
+            if _is_compliance_json(f):
+                # Per-framework OCSF/JSON compliance exports are redundant with the
+                # semicolon-delimited compliance CSVs (which the coverage parser reads).
+                # Route them to 'other' so they are neither counted as main findings nor
+                # fed to the CSV compliance parser (which would mis-split the JSON).
+                result["other"].append(str(f))
             else:
-                result["prowler_json"].append(str(f))
+                category = _classify_json(f)
+                if category == "security_hub":
+                    result["security_hub_json"].append(str(f))
+                else:
+                    result["prowler_json"].append(str(f))
         else:
             result["other"].append(str(f))
 
@@ -832,39 +866,48 @@ def main():
     # CSV -> OCSF JSON -> Security Hub JSON -> HTML. Prowler emits the SAME findings
     # in multiple formats simultaneously, so parsing more than one source would
     # double-count. We therefore pick ONE source and stop.
-    print("[2/4] Parsing findings (single richest source; formats are duplicates)...")
+    # Group scan files by scan identity, then parse ONE format per scan. Prowler writes
+    # every format of a single scan under the SAME filename stem
+    # (prowler-output-<id>-<ts>.csv / .ocsf.json / .html), so the stem identifies a scan.
+    # Within each scan we pick a single richest source (CSV > OCSF JSON > Security Hub > HTML)
+    # to avoid double-counting the same findings across formats. Because we process EVERY
+    # scan group, distinct scans — including different providers in one folder (e.g. an AWS
+    # CSV alongside a GCP OCSF JSON) — are all retained.
+    print("[2/4] Parsing findings (one source per scan group; distinct scans all kept)...")
+
+    def _scan_stem(path):
+        b = os.path.basename(path)
+        for ext in (".ocsf.json", ".csv", ".html", ".json"):
+            if b.lower().endswith(ext):
+                return b[: -len(ext)]
+        return os.path.splitext(b)[0]
+
+    # Build scan groups: stem -> {format: [paths]}
+    groups = {}
+    for fmt, paths in (("csv", files["prowler_main_csv"]), ("ocsf", files["prowler_json"]),
+                       ("securityhub", files["security_hub_json"]), ("html", files["prowler_html"])):
+        for p in paths:
+            groups.setdefault(_scan_stem(p), {}).setdefault(fmt, []).append(p)
+
     all_findings = []
-    if files["prowler_main_csv"]:
-        chosen = "Prowler CSV"
-        for csv_path in files["prowler_main_csv"]:
-            print(f"       CSV: {os.path.basename(csv_path)}")
-            recs = parse_prowler_main_csv(csv_path)
+    _parsers = {"csv": parse_prowler_main_csv, "ocsf": parse_ocsf_json,
+                "securityhub": parse_security_hub_json, "html": parse_prowler_html}
+    _labels = {"csv": "CSV", "ocsf": "OCSF JSON", "securityhub": "Security Hub JSON", "html": "HTML"}
+    for stem in sorted(groups):
+        fmts = groups[stem]
+        # richest source priority
+        chosen_fmt = next((f for f in ("csv", "ocsf", "securityhub", "html") if f in fmts), None)
+        if not chosen_fmt:
+            continue
+        others = [f for f in fmts if f != chosen_fmt]
+        note = f" (ignored duplicate formats: {', '.join(_labels[o] for o in others)})" if others else ""
+        for path in fmts[chosen_fmt]:
+            recs = _parsers[chosen_fmt](path)
             all_findings.extend(recs)
-            print(f"         -> {len(recs)} records")
-    elif files["prowler_json"]:
-        chosen = "Prowler OCSF JSON"
-        for json_path in files["prowler_json"]:
-            print(f"       OCSF JSON: {os.path.basename(json_path)}")
-            recs = parse_ocsf_json(json_path)
-            all_findings.extend(recs)
-            print(f"         -> {len(recs)} records")
-    elif files["security_hub_json"]:
-        chosen = "Security Hub / ASFF JSON"
-        for json_path in files["security_hub_json"]:
-            print(f"       Security Hub JSON: {os.path.basename(json_path)}")
-            recs = parse_security_hub_json(json_path)
-            all_findings.extend(recs)
-            print(f"         -> {len(recs)} records")
-    elif files["prowler_html"]:
-        chosen = "Prowler HTML"
-        for html_path in files["prowler_html"]:
-            print(f"       HTML: {os.path.basename(html_path)}")
-            recs = parse_prowler_html(html_path)
-            all_findings.extend(recs)
-            print(f"         -> {len(recs)} records")
-    else:
-        chosen = "none"
-    print(f"       Findings source used: {chosen} ({len(all_findings)} findings)")
+            print(f"       [{_labels[chosen_fmt]}] {os.path.basename(path)} -> {len(recs)} records{note}")
+
+    provs = sorted({(f.get("PROVIDER") or "unknown").lower() for f in all_findings})
+    print(f"       {len(all_findings)} findings across {len(groups)} scan group(s); provider(s): {', '.join(provs) or 'none'}")
 
     print("[3/4] Parsing compliance CSVs...")
     all_compliance = []
@@ -920,12 +963,17 @@ def main():
         mask = build_scope_mask(effective_scopes)
         output = apply_anonymization(output, mask)
         output["metadata"]["anonymized"] = True
-        output["metadata"]["scope_label_map"] = {v: k for k, v in mask.items()}  # label -> (kept private) count only
-        # Do NOT store the reverse (label->real) in the shipped analysis.json; write a
-        # separate sidecar for the operator's own verification, next to the output.
+        # Store ONLY the generic labels in the shipped analysis.json — never the real
+        # identifiers. (A previous version stored {label: real_id} here, which leaked the
+        # real account/subscription/project/tenancy IDs into the customer-facing file.)
+        # The real->label mapping is written ONLY to the operator-side anon_map.json sidecar.
+        output["metadata"]["scope_labels"] = sorted(mask.values())
+        # Write the reverse mapping to a SEPARATE operator sidecar (NOT shipped to the
+        # customer) next to the output, for the operator's own de-anonymization/verification.
         sidecar = os.path.join(os.path.dirname(output_json), "anon_map.json")
         with open(sidecar, "w", encoding="utf-8") as mf:
             json.dump({"real_to_label": mask}, mf, indent=2)
+        # Verify the shipped output (analysis.json content) contains NO real identifiers.
         leaks = verify_anonymization(output, mask)
         if leaks:
             print(f"   WARNING: anonymization incomplete, {len(leaks)} identifier(s) still present: {leaks}",

@@ -91,8 +91,11 @@ IaC is always **Terraform** — one consistent language across all clouds.
 ├── {Customer}_README.md
 ├── {Customer}_Security_Remediation_Plan.pdf
 └── iac/
-    ├── {Customer}_<provider>_<remediation>.tf
-    └── {Customer}_<provider>_<remediation>.tfvars.example
+    ├── providers.tf                       # shared provider + terraform block
+    ├── variables.tf                       # all variable declarations (shared)
+    ├── locals.tf                          # shared tags/labels
+    ├── terraform.tfvars.example           # one example tfvars for all modules
+    └── {Customer}_<provider>_<remediation>.tf   # resource-only module(s)
 ```
 
 **Default output folder:** if you don't specify one, a per-provider `assessment-summary-<provider>` folder is created (provider auto-detected — e.g. `assessment-summary-aws`) beside the input. Run once per provider.
