@@ -12,6 +12,7 @@ Usage:
 """
 
 import argparse
+import html
 import json
 import os
 import sys
@@ -244,13 +245,20 @@ def _top_checks_table(top_checks: list) -> str:
         badge_class = f"severity-{sev}" if sev in ("critical", "high", "medium", "low") else ""
         provider = check.get("provider", "")
         prov_label = provider.upper() if provider and provider != "unknown" else ""
+        # html.escape() every Prowler-derived string to prevent HTML/JS injection
+        # from crafted check titles, service names, or resource-derived risk text.
+        _title = html.escape(str(check.get('check_title', ''))[:60])
+        _service = html.escape(str(check.get('service', '')))
+        _severity = html.escape(str(check.get('severity', '')))
+        _risk = html.escape(str(check.get('risk', ''))[:80])
+        _prov = html.escape(prov_label)
         rows += f"""<tr>
-  <td>{check.get('check_title', '')[:60]}</td>
-  <td>{prov_label}</td>
-  <td>{check.get('service', '')}</td>
-  <td><span class="severity-badge {badge_class}">{check.get('severity', '')}</span></td>
+  <td>{_title}</td>
+  <td>{_prov}</td>
+  <td>{_service}</td>
+  <td><span class="severity-badge {badge_class}">{_severity}</span></td>
   <td>{check.get('count', 0)}</td>
-  <td>{check.get('risk', '')[:80]}</td>
+  <td>{_risk}</td>
 </tr>\n"""
 
     return f"""
@@ -291,10 +299,15 @@ def _remediation_section(top_checks: list) -> str:
         sev = check.get("severity", "").lower()
         card_class = sev if sev in ("critical", "high", "medium") else ""
         rem_text = check.get("remediation_text", "")[:120] or "See the relevant cloud provider documentation for remediation steps."
+        # Escape all Prowler-derived strings to prevent HTML/JS injection.
+        _c_title = html.escape(str(check.get('check_title', ''))[:50])
+        _c_service = html.escape(str(check.get('service', '')))
+        _c_sev = html.escape(str(check.get('severity', '')))
+        _rem = html.escape(str(rem_text))
         cards += f"""<div class="rem-card {card_class}">
-  <h4>{check.get('check_title', '')[:50]}</h4>
-  <p><strong>{check.get('service', '')}</strong> - {check.get('severity', '')}</p>
-  <p>{rem_text}</p>
+  <h4>{_c_title}</h4>
+  <p><strong>{_c_service}</strong> - {_c_sev}</p>
+  <p>{_rem}</p>
 </div>\n"""
 
     return f"""
