@@ -555,6 +555,8 @@ def analyze_findings(all_findings: list) -> dict:
         "high": severity_counter.get("High", 0),
         "medium": severity_counter.get("Medium", 0),
         "low": severity_counter.get("Low", 0),
+        "other": sum(v for k, v in severity_counter.items()
+                     if k not in ("Critical", "High", "Medium", "Low")),
     }
 
     service_counter = Counter(f.get("SERVICE_NAME", "Unknown") or "Unknown" for f in failed)
@@ -581,6 +583,8 @@ def analyze_findings(all_findings: list) -> dict:
                 "high": p_sev.get("High", 0),
                 "medium": p_sev.get("Medium", 0),
                 "low": p_sev.get("Low", 0),
+                "other": sum(v for k, v in p_sev.items()
+                             if k not in ("Critical", "High", "Medium", "Low")),
             },
             "findings_by_service": dict(p_svc.most_common(10)),
             "scopes": p_scopes,
@@ -616,10 +620,16 @@ def analyze_findings(all_findings: list) -> dict:
     detailed_findings = []
     seen = set()
     for f in failed:
-        key = (f.get("CHECK_ID", ""), f.get("RESOURCE_UID", ""))
-        if key in seen:
-            continue
-        seen.add(key)
+        resource_uid = f.get("RESOURCE_UID", "")
+        check_id = f.get("CHECK_ID", "")
+        # Only deduplicate when RESOURCE_UID is non-empty. When it's blank (common
+        # for OCSF/HTML/Security Hub findings), each finding row is unique and
+        # collapsing them would under-report the number of affected resources.
+        if resource_uid:
+            key = (check_id, resource_uid)
+            if key in seen:
+                continue
+            seen.add(key)
         detailed_findings.append({
             "provider": f.get("PROVIDER", "unknown"),
             "check_id": f.get("CHECK_ID", ""),
@@ -980,6 +990,9 @@ def main():
         mask = build_scope_mask(effective_scopes)
         output = apply_anonymization(output, mask)
         output["metadata"]["anonymized"] = True
+        # Redact the input_folder path — it can leak operator identity or customer
+        # names via directory paths (e.g. /Users/jdoe/clients/AcmeCorp/output).
+        output["metadata"]["input_folder"] = "<redacted>"
         # Store ONLY the generic labels in the shipped analysis.json — never the real
         # identifiers. (A previous version stored {label: real_id} here, which leaked the
         # real account/subscription/project/tenancy IDs into the customer-facing file.)
