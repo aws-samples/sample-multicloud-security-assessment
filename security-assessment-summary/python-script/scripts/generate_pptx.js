@@ -36,7 +36,7 @@ const severity = summary.findings_by_severity;
 const topChecks = data.top_failed_checks || [];
 const compliance = data.compliance_coverage || {};
 
-const PROVIDER_LABEL = { aws: "AWS", azure: "Azure", gcp: "GCP", oci: "OCI" };
+const PROVIDER_LABEL = { aws: "AWS", azure: "Azure", gcp: "GCP", oci: "OCI", kubernetes: "Kubernetes", unknown: "Unknown" };
 const providers = ((data.metadata && data.metadata.providers && data.metadata.providers.length)
   ? data.metadata.providers
   : (data.summary && data.summary.findings_by_provider ? Object.keys(data.summary.findings_by_provider) : []));

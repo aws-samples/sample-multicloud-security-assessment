@@ -48,19 +48,15 @@ from datetime import datetime
 PROVIDER_TF = {
     "aws": {
         "provider_block": 'provider "aws" {\n  region = var.region\n}',
-        "region_var": 'variable "region" {\n  type        = string\n  description = "Target cloud region."\n  default     = "us-east-1"\n}',
     },
     "azure": {
         "provider_block": 'provider "azurerm" {\n  features {}\n}',
-        "region_var": 'variable "location" {\n  type        = string\n  description = "Azure location."\n  default     = "eastus"\n}',
     },
     "gcp": {
         "provider_block": 'provider "google" {\n  project = var.project_id\n  region  = var.region\n}',
-        "region_var": 'variable "project_id" {\n  type        = string\n  description = "GCP project ID."\n}\n\nvariable "region" {\n  type        = string\n  default     = "us-central1"\n}',
     },
     "oci": {
         "provider_block": 'provider "oci" {\n  tenancy_ocid = var.tenancy_ocid\n  region       = var.region\n}',
-        "region_var": 'variable "tenancy_ocid" {\n  type        = string\n  description = "OCI tenancy OCID."\n}\n\nvariable "region" {\n  type        = string\n  default     = "us-ashburn-1"\n}',
     },
 }
 
@@ -82,6 +78,12 @@ AZURE_IDENTITY_KEYS = {"entra_mfa"}
 
 # Provider-appropriate remediation catalog. Each entry: title, description, and a
 # Terraform body builder () -> HCL string for the resource(s).
+#
+# IMPORTANT: These are REFERENCE TEMPLATES, not surgical in-place fixes for specific
+# failing resources. They create new correctly-configured resources that demonstrate
+# the required security posture. Operators MUST customize them (e.g. attach NSGs to
+# existing subnets, associate security groups with existing instances) before applying.
+# Always run `terraform plan` and review the execution plan before `terraform apply`.
 REMEDIATION_CATALOG = {
     # ----------------------------- AWS -----------------------------
     "aws": {
@@ -600,10 +602,20 @@ def generate_terraform(customer: str, provider: str, selections: list, output_di
     duplicate variable/locals declarations and undeclared-variable errors when
     Terraform loads every .tf in the directory together.
     """
-    provider = provider if provider in REMEDIATION_CATALOG else "aws"
+    if provider not in REMEDIATION_CATALOG:
+        valid_providers = ", ".join(sorted(REMEDIATION_CATALOG.keys()))
+        print(f"  [ERROR] Unknown provider '{provider}'. Valid providers: {valid_providers}",
+              file=sys.stderr)
+        return []
     catalog = REMEDIATION_CATALOG[provider]
     tf_meta = PROVIDER_TF[provider]
     os.makedirs(output_dir, exist_ok=True)
+
+    # Clean up previously generated .tf files from prior runs so that removed
+    # selections don't linger. Terraform loads ALL .tf files in a directory, so
+    # stale remediation files would remain active even if omitted from the new run.
+    for existing_tf in [f for f in os.listdir(output_dir) if f.endswith(".tf")]:
+        os.remove(os.path.join(output_dir, existing_tf))
 
     # Resolve each selection (accepts provider-neutral names or provider-specific keys),
     # then validate. Fail loudly on unknown IDs rather than silently skipping.
@@ -651,7 +663,12 @@ def generate_terraform(customer: str, provider: str, selections: list, output_di
         content = (
             f"# {customer} — {entry['title']}\n"
             f"# {entry['description']}\n"
-            f"# Variables are declared in variables.tf; providers/locals are shared.\n\n"
+            f"# Variables are declared in variables.tf; providers/locals are shared.\n"
+            f"#\n"
+            f"# NOTE: This is a REFERENCE TEMPLATE. It creates new resources demonstrating\n"
+            f"# the correct security posture. You must customize it to target your existing\n"
+            f"# resources (e.g. attach to existing subnets/instances) before applying.\n"
+            f"# Always run `terraform plan` to review changes before `terraform apply`.\n\n"
             f"{entry['body']()}\n"
         )
         filename = f"{customer.replace(' ', '_')}_{provider}_{sel}.tf"

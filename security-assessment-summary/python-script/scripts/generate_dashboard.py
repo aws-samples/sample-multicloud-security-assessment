@@ -161,11 +161,23 @@ def _kpi_section(summary: dict, scopes: list, scope_term: str) -> str:
 """
 
 
+def _safe_json_for_script(obj) -> str:
+    """Serialize obj to JSON safe for embedding inside an HTML <script> block.
+
+    json.dumps does not escape '</' or '<!--', so a crafted string like
+    '</script><script>alert(1)</script>' can break out of the script context.
+    Replacing '<' and '>' with their Unicode escape sequences neutralizes this
+    without affecting JSON semantics (JSON parsers decode \\uXXXX transparently).
+    """
+    raw = json.dumps(obj)
+    return raw.replace("<", "\\u003c").replace(">", "\\u003e")
+
+
 def _charts_section(score: float, severity: dict, by_service: dict) -> str:
     services = list(by_service.keys())[:10]
     service_vals = [by_service[s] for s in services]
-    services_json = json.dumps(services)
-    service_vals_json = json.dumps(service_vals)
+    services_json = _safe_json_for_script(services)
+    service_vals_json = _safe_json_for_script(service_vals)
 
     return f"""
 <div class="charts-row">
