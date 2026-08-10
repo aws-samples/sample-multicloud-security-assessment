@@ -22,7 +22,12 @@ This tool is available in three variants. Pick the one that best fits your workf
 | [**Python Scripts**](python-script/README.md) | Standalone CLI pipeline — no AI runtime needed | Run scripts directly with `python3` and `node` |
 | [**Amazon Quick Skill**](quick-skill/README.md) | Amazon Q Developer / Quick skill integration | Install as a Quick skill |
 
-All three variants produce identical deliverables using the same underlying scripts. They differ only in how you invoke them.
+All three variants target the same deliverables — an interactive HTML dashboard, an executive PPTX deck, a phased remediation-plan PDF, Terraform modules, and a README. They differ in **execution model**:
+
+- **Python Scripts** is the single source of truth — a standalone, self-contained CLI pipeline. **Kiro Agent** is a thin conversational wrapper: it bundles no scripts of its own and invokes the `python-script/scripts/` code via relative paths, so it produces identical output with zero duplication. (Because of this, the Kiro Agent variant requires the `python-script/` folder to be present alongside it.)
+- The **Amazon Quick Skill** ships **no bundled scripts** — its `SKILL.md` instructs the AI assistant to generate the equivalent logic at run time. It targets the same deliverables and format, but because the code is LLM-generated per run, output is functionally equivalent rather than byte-for-byte identical, and it requires the Amazon Quick runtime.
+
+Each variant is self-contained: pick one based on your workflow and run it independently.
 
 ## Multi-Cloud Support
 
@@ -44,12 +49,12 @@ A single input folder may contain scans from more than one cloud.
 
 ## Requirements
 
-- **Python 3.9+** with packages: `pandas`, `matplotlib`, `reportlab`
+- **Python 3.9+** with packages: `matplotlib`, `numpy`, `reportlab`
 - **Node.js 18+** with package: `pptxgenjs`
 - For Terraform deployment: **Terraform CLI** + relevant provider CLI (`aws` / `az` / `gcloud` / `oci`)
 
 ```bash
-pip3 install pandas matplotlib reportlab
+pip3 install matplotlib numpy reportlab
 cd <variant>/scripts && npm install
 ```
 

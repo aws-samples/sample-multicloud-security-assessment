@@ -64,15 +64,31 @@ PROVIDER_TF = {
     },
 }
 
+# Version-pinned required_providers per cloud. Pinning avoids surprise breakage when
+# a new major provider release changes/removes arguments (e.g. azurerm v4 removed
+# enable_https_traffic_only). The azuread provider is added dynamically when an Azure
+# identity remediation is selected (see generate_terraform).
+REQUIRED_PROVIDERS = {
+    "aws":   '\n    aws = {\n      source  = "hashicorp/aws"\n      version = "~> 5.0"\n    }',
+    "azure": '\n    azurerm = {\n      source  = "hashicorp/azurerm"\n      version = "~> 3.0"\n    }',
+    "gcp":   '\n    google = {\n      source  = "hashicorp/google"\n      version = "~> 5.0"\n    }',
+    "oci":   '\n    oci = {\n      source  = "oracle/oci"\n      version = "~> 5.0"\n    }',
+}
+
+# Azure identity remediation additionally needs the separate azuread provider.
+AZUREAD_REQUIRED = '\n    azuread = {\n      source  = "hashicorp/azuread"\n      version = "~> 2.0"\n    }'
+AZURE_IDENTITY_KEYS = {"entra_mfa"}
+
+
 # Provider-appropriate remediation catalog. Each entry: title, description, and a
-# Terraform body builder (customer, environment) -> HCL string for the resource(s).
+# Terraform body builder () -> HCL string for the resource(s).
 REMEDIATION_CATALOG = {
     # ----------------------------- AWS -----------------------------
     "aws": {
         "s3_public_access": {
             "title": "S3 Block Public Access & Default Encryption",
             "description": "Account-level S3 public access block + default SSE-KMS.",
-            "body": lambda c, e: '''resource "aws_s3_account_public_access_block" "this" {
+            "body": lambda: '''resource "aws_s3_account_public_access_block" "this" {
   block_public_acls       = true
   block_public_policy     = true
   ignore_public_acls      = true
@@ -93,7 +109,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "example" {
         "iam_mfa": {
             "title": "IAM MFA Enforcement",
             "description": "Managed policy denying actions when MFA is absent.",
-            "body": lambda c, e: '''resource "aws_iam_policy" "enforce_mfa" {
+            "body": lambda: '''resource "aws_iam_policy" "enforce_mfa" {
   name        = "${var.name_prefix}-enforce-mfa"
   description = "Deny all except MFA self-management when MFA not present"
   policy = jsonencode({
@@ -117,7 +133,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "example" {
         "security_groups": {
             "title": "Security Group Restriction",
             "description": "Security group with no unrestricted (0.0.0.0/0) SSH/RDP ingress.",
-            "body": lambda c, e: '''resource "aws_security_group" "restricted" {
+            "body": lambda: '''resource "aws_security_group" "restricted" {
   name        = "${var.name_prefix}-restricted"
   description = "No unrestricted ingress on sensitive ports"
   vpc_id      = var.vpc_id
@@ -141,7 +157,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "example" {
         "encryption_at_rest": {
             "title": "EBS/RDS Encryption at Rest",
             "description": "Enable account-default EBS encryption.",
-            "body": lambda c, e: '''resource "aws_ebs_encryption_by_default" "this" {
+            "body": lambda: '''resource "aws_ebs_encryption_by_default" "this" {
   enabled = true
 }
 
@@ -152,7 +168,7 @@ resource "aws_ebs_default_kms_key" "this" {
         "audit_logging": {
             "title": "Multi-Region CloudTrail",
             "description": "Multi-region CloudTrail with log-file validation.",
-            "body": lambda c, e: '''resource "aws_cloudtrail" "this" {
+            "body": lambda: '''resource "aws_cloudtrail" "this" {
   name                          = "${var.name_prefix}-trail"
   s3_bucket_name                = var.log_bucket_name
   is_multi_region_trail         = true
@@ -165,7 +181,7 @@ resource "aws_ebs_default_kms_key" "this" {
         "flow_logs": {
             "title": "VPC Flow Logs",
             "description": "Enable VPC Flow Logs to CloudWatch Logs.",
-            "body": lambda c, e: '''resource "aws_flow_log" "this" {
+            "body": lambda: '''resource "aws_flow_log" "this" {
   vpc_id          = var.vpc_id
   traffic_type    = "ALL"
   log_destination = aws_cloudwatch_log_group.flow.arn
@@ -181,7 +197,7 @@ resource "aws_cloudwatch_log_group" "flow" {
         "kms_rotation": {
             "title": "KMS Key Rotation",
             "description": "Customer-managed KMS key with annual rotation.",
-            "body": lambda c, e: '''resource "aws_kms_key" "this" {
+            "body": lambda: '''resource "aws_kms_key" "this" {
   description             = "${var.name_prefix} CMK with rotation"
   enable_key_rotation     = true
   deletion_window_in_days = 30
@@ -194,13 +210,13 @@ resource "aws_cloudwatch_log_group" "flow" {
         "storage_secure": {
             "title": "Storage Account Secure Transfer & Private Access",
             "description": "Enforce HTTPS-only + disable public blob access.",
-            "body": lambda c, e: '''resource "azurerm_storage_account" "this" {
+            "body": lambda: '''resource "azurerm_storage_account" "this" {
   name                            = var.storage_account_name
   resource_group_name             = var.resource_group_name
   location                        = var.location
   account_tier                    = "Standard"
   account_replication_type        = "GRS"
-  enable_https_traffic_only       = true
+  https_traffic_only_enabled      = true
   min_tls_version                 = "TLS1_2"
   allow_nested_items_to_be_public = false
   tags                            = local.tags
@@ -209,7 +225,7 @@ resource "aws_cloudwatch_log_group" "flow" {
         "entra_mfa": {
             "title": "Entra ID MFA / Conditional Access",
             "description": "Conditional access policy requiring MFA.",
-            "body": lambda c, e: '''resource "azuread_conditional_access_policy" "require_mfa" {
+            "body": lambda: '''resource "azuread_conditional_access_policy" "require_mfa" {
   display_name = "${var.name_prefix}-require-mfa"
   state        = "enabled"
   conditions {
@@ -226,7 +242,7 @@ resource "aws_cloudwatch_log_group" "flow" {
         "nsg_restrict": {
             "title": "NSG Restriction",
             "description": "Network security group denying broad inbound access.",
-            "body": lambda c, e: '''resource "azurerm_network_security_group" "restricted" {
+            "body": lambda: '''resource "azurerm_network_security_group" "restricted" {
   name                = "${var.name_prefix}-nsg"
   location            = var.location
   resource_group_name = var.resource_group_name
@@ -247,14 +263,14 @@ resource "aws_cloudwatch_log_group" "flow" {
         "disk_sql_encryption": {
             "title": "Disk / SQL Encryption",
             "description": "Enforce encryption on managed disks and Azure SQL.",
-            "body": lambda c, e: '''resource "azurerm_mssql_server_transparent_data_encryption" "this" {
+            "body": lambda: '''resource "azurerm_mssql_server_transparent_data_encryption" "this" {
   server_id = var.sql_server_id
 }''',
         },
         "activity_log": {
             "title": "Activity Log + Diagnostic Settings",
             "description": "Route activity logs to a Log Analytics workspace.",
-            "body": lambda c, e: '''resource "azurerm_monitor_diagnostic_setting" "activity" {
+            "body": lambda: '''resource "azurerm_monitor_diagnostic_setting" "activity" {
   name                       = "${var.name_prefix}-activity"
   target_resource_id         = var.subscription_id
   log_analytics_workspace_id = var.log_analytics_workspace_id
@@ -264,7 +280,7 @@ resource "aws_cloudwatch_log_group" "flow" {
         "keyvault_protection": {
             "title": "Key Vault Soft-Delete & Purge Protection",
             "description": "Enable soft-delete + purge protection on Key Vault.",
-            "body": lambda c, e: '''resource "azurerm_key_vault" "this" {
+            "body": lambda: '''resource "azurerm_key_vault" "this" {
   name                       = var.key_vault_name
   location                   = var.location
   resource_group_name        = var.resource_group_name
@@ -281,7 +297,7 @@ resource "aws_cloudwatch_log_group" "flow" {
         "gcs_public_access": {
             "title": "GCS Uniform Access & Public Access Prevention",
             "description": "Uniform bucket-level access + enforced public access prevention.",
-            "body": lambda c, e: '''resource "google_storage_bucket" "this" {
+            "body": lambda: '''resource "google_storage_bucket" "this" {
   name                        = var.bucket_name
   location                    = var.region
   uniform_bucket_level_access = true
@@ -292,7 +308,7 @@ resource "aws_cloudwatch_log_group" "flow" {
         "iam_least_privilege": {
             "title": "IAM Least Privilege",
             "description": "Custom role scoped to least privilege.",
-            "body": lambda c, e: '''resource "google_project_iam_custom_role" "least_priv" {
+            "body": lambda: '''resource "google_project_iam_custom_role" "least_priv" {
   role_id     = "${replace(var.name_prefix, "-", "_")}_least_priv"
   title       = "${var.name_prefix} least privilege"
   permissions = var.permissions
@@ -301,7 +317,7 @@ resource "aws_cloudwatch_log_group" "flow" {
         "firewall_restrict": {
             "title": "Firewall Rule Restriction",
             "description": "Firewall rule limiting ingress to a trusted range.",
-            "body": lambda c, e: '''resource "google_compute_firewall" "restricted" {
+            "body": lambda: '''resource "google_compute_firewall" "restricted" {
   name    = "${var.name_prefix}-restricted"
   network = var.network
   allow {
@@ -314,7 +330,7 @@ resource "aws_cloudwatch_log_group" "flow" {
         "cmek_encryption": {
             "title": "CMEK Encryption",
             "description": "Customer-managed encryption key (CMEK) with rotation.",
-            "body": lambda c, e: '''resource "google_kms_crypto_key" "this" {
+            "body": lambda: '''resource "google_kms_crypto_key" "this" {
   name            = "${var.name_prefix}-cmek"
   key_ring        = var.key_ring_id
   rotation_period = "7776000s"
@@ -324,7 +340,7 @@ resource "aws_cloudwatch_log_group" "flow" {
         "audit_logs": {
             "title": "Cloud Audit Logs",
             "description": "Enable data-access audit logging for all services.",
-            "body": lambda c, e: '''resource "google_project_iam_audit_config" "this" {
+            "body": lambda: '''resource "google_project_iam_audit_config" "this" {
   project = var.project_id
   service = "allServices"
   audit_log_config { log_type = "DATA_READ" }
@@ -335,7 +351,7 @@ resource "aws_cloudwatch_log_group" "flow" {
         "kms_rotation": {
             "title": "KMS Key Rotation",
             "description": "Rotate KMS crypto keys automatically.",
-            "body": lambda c, e: '''resource "google_kms_crypto_key" "rotating" {
+            "body": lambda: '''resource "google_kms_crypto_key" "rotating" {
   name            = "${var.name_prefix}-rotating"
   key_ring        = var.key_ring_id
   rotation_period = "7776000s"
@@ -347,7 +363,7 @@ resource "aws_cloudwatch_log_group" "flow" {
         "object_storage_visibility": {
             "title": "Object Storage Private Visibility",
             "description": "Ensure object storage buckets are private.",
-            "body": lambda c, e: '''resource "oci_objectstorage_bucket" "this" {
+            "body": lambda: '''resource "oci_objectstorage_bucket" "this" {
   compartment_id = var.compartment_ocid
   name           = var.bucket_name
   namespace      = var.namespace
@@ -358,7 +374,7 @@ resource "aws_cloudwatch_log_group" "flow" {
         "iam_policy": {
             "title": "IAM Policy Hardening",
             "description": "Least-privilege IAM policy in the tenancy.",
-            "body": lambda c, e: '''resource "oci_identity_policy" "least_priv" {
+            "body": lambda: '''resource "oci_identity_policy" "least_priv" {
   compartment_id = var.tenancy_ocid
   name           = "${var.name_prefix}-least-priv"
   description    = "Least privilege policy"
@@ -368,7 +384,7 @@ resource "aws_cloudwatch_log_group" "flow" {
         "security_lists": {
             "title": "Security List Restriction",
             "description": "Restrict ingress in the VCN security list.",
-            "body": lambda c, e: '''resource "oci_core_security_list" "restricted" {
+            "body": lambda: '''resource "oci_core_security_list" "restricted" {
   compartment_id = var.compartment_ocid
   vcn_id         = var.vcn_id
   display_name   = "${var.name_prefix}-restricted"
@@ -381,7 +397,7 @@ resource "aws_cloudwatch_log_group" "flow" {
         "volume_db_encryption": {
             "title": "Block Volume / DB Encryption",
             "description": "Encrypt block volumes with a Vault key.",
-            "body": lambda c, e: '''resource "oci_core_volume" "encrypted" {
+            "body": lambda: '''resource "oci_core_volume" "encrypted" {
   compartment_id      = var.compartment_ocid
   availability_domain = var.availability_domain
   kms_key_id          = var.kms_key_id
@@ -390,7 +406,7 @@ resource "aws_cloudwatch_log_group" "flow" {
         "audit_logging": {
             "title": "Audit Logging",
             "description": "Ensure the tenancy audit retention is configured.",
-            "body": lambda c, e: '''resource "oci_audit_configuration" "this" {
+            "body": lambda: '''resource "oci_audit_configuration" "this" {
   compartment_id                  = var.tenancy_ocid
   retention_period_days           = 365
 }''',
@@ -398,7 +414,7 @@ resource "aws_cloudwatch_log_group" "flow" {
         "vault_rotation": {
             "title": "Vault Key Rotation",
             "description": "Vault master encryption key.",
-            "body": lambda c, e: '''resource "oci_kms_key" "this" {
+            "body": lambda: '''resource "oci_kms_key" "this" {
   compartment_id      = var.compartment_ocid
   display_name        = "${var.name_prefix}-key"
   management_endpoint = var.management_endpoint
@@ -604,11 +620,23 @@ def generate_terraform(customer: str, provider: str, selections: list, output_di
         return []
 
     # --- Shared files (written once) ---
+    # Build a version-pinned required_providers block. Add azuread when an Azure
+    # identity remediation is selected (its resources use the azuread provider).
+    req = REQUIRED_PROVIDERS.get(provider, "")
+    needs_azuread = provider == "azure" and any(v in AZURE_IDENTITY_KEYS for v in valid)
+    if needs_azuread:
+        req = req + AZUREAD_REQUIRED
+    provider_blocks = tf_meta["provider_block"]
+    if needs_azuread:
+        provider_blocks = provider_blocks + '\n\nprovider "azuread" {}'
     with open(os.path.join(output_dir, "providers.tf"), "w", encoding="utf-8") as fh:
         fh.write(f"{DISCLAIMER}\n"
                  f"# Shared provider + terraform settings for the remediation modules.\n\n"
-                 'terraform {\n  required_version = ">= 1.5"\n}\n\n'
-                 f"{tf_meta['provider_block']}\n")
+                 'terraform {\n  required_version = ">= 1.5"\n\n'
+                 '  required_providers {'
+                 f"{req}\n"
+                 '  }\n}\n\n'
+                 f"{provider_blocks}\n")
     with open(os.path.join(output_dir, "variables.tf"), "w", encoding="utf-8") as fh:
         fh.write(_render_variables_tf(provider, customer) + "\n")
     with open(os.path.join(output_dir, "locals.tf"), "w", encoding="utf-8") as fh:
@@ -624,7 +652,7 @@ def generate_terraform(customer: str, provider: str, selections: list, output_di
             f"# {customer} — {entry['title']}\n"
             f"# {entry['description']}\n"
             f"# Variables are declared in variables.tf; providers/locals are shared.\n\n"
-            f"{entry['body'](customer, 'production')}\n"
+            f"{entry['body']()}\n"
         )
         filename = f"{customer.replace(' ', '_')}_{provider}_{sel}.tf"
         with open(os.path.join(output_dir, filename), "w", encoding="utf-8") as fh:

@@ -1,9 +1,0 @@
-{
-  "name": "cloud-security-pptx",
-  "version": "1.0.0",
-  "private": true,
-  "description": "PPTX generator for the multi-cloud security assessment scripts",
-  "dependencies": {
-    "pptxgenjs": "^3.12.0"
-  }
-}

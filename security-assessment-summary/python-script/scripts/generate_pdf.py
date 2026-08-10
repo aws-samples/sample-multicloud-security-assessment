@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 import sys
+from providers import PROVIDER_LABELS as PROVIDER_LABEL, PROVIDER_SCOPE_TERM as SCOPE_TERM
 
 try:
     from reportlab.lib import colors
@@ -37,10 +38,6 @@ HIGH_ORANGE = colors.HexColor("#F57C00")
 MEDIUM_YELLOW = colors.HexColor("#FBC02D")
 LOW_GREEN = colors.HexColor("#388E3C")
 LIGHT_GRAY = colors.HexColor("#F4F6F9")
-
-SCOPE_TERM = {"aws": "account", "azure": "subscription", "gcp": "project", "oci": "tenancy"}
-PROVIDER_LABEL = {"aws": "AWS", "azure": "Azure", "gcp": "GCP", "oci": "OCI"}
-
 
 def load_analysis(path: str) -> dict:
     with open(path, "r", encoding="utf-8") as fh:

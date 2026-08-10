@@ -26,6 +26,22 @@ from collections import Counter, defaultdict
 from datetime import datetime
 from html.parser import HTMLParser
 from pathlib import Path
+from providers import PROVIDER_LABELS, PROVIDER_SCOPE_TERM
+
+# Prowler REMEDIATION_CODE_* / RISK / DESCRIPTION fields can exceed Python's default
+# CSV field limit (131,072 chars). Without this, csv.reader raises "field larger than
+# field limit" and an entire file's findings would be silently dropped. Bump to the
+# platform max (with a fallback for platforms where sys.maxsize overflows a C long).
+try:
+    csv.field_size_limit(sys.maxsize)
+except OverflowError:
+    # Some 32-bit / Windows builds reject sys.maxsize; fall back to the largest
+    # value that is universally accepted.
+    csv.field_size_limit(min(sys.maxsize, 2**31 - 1))
+
+# Collects human-readable parse warnings so they can be surfaced in the output JSON
+# (not just printed to stderr) — a downstream consumer can see if any file failed.
+_PARSE_WARNINGS = []
 
 
 # ---------------------------------------------------------------------------
@@ -33,26 +49,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 # Normalized provider keys and human-friendly labels.
-PROVIDER_LABELS = {
-    "aws": "AWS",
-    "azure": "Azure",
-    "gcp": "GCP",
-    "oci": "OCI",
-    "kubernetes": "Kubernetes",
-    "unknown": "Unknown",
-}
-
 # Per-provider name for the top-level isolation boundary ("scope").
-PROVIDER_SCOPE_TERM = {
-    "aws": "account",
-    "azure": "subscription",
-    "gcp": "project",
-    "oci": "tenancy",
-    "kubernetes": "cluster",
-    "unknown": "scope",
-}
-
-
 def normalize_provider(raw: str) -> str:
     """Map an arbitrary provider string to a normalized key."""
     if not raw:
@@ -132,8 +129,7 @@ def _is_compliance_json(filepath: Path) -> bool:
             break
     # Main scan stems look like: prowler-output-<scope>-<14-digit-timestamp>
     # A compliance file appends _<framework> after the timestamp.
-    import re as _re
-    m = _re.search(r"-(\d{14})(.+)$", stem)
+    m = re.search(r"-(\d{14})(.+)$", stem)
     if m and m.group(2):  # extra text after the timestamp -> framework-specific
         return True
     return False
@@ -277,7 +273,7 @@ def parse_prowler_main_csv(filepath: str) -> list:
                                  or norm.get("TENANCY_ID") or norm.get("SCOPE_ID") or "")
                 findings.append(f)
     except Exception as e:
-        print(f"  [WARN] Failed to parse {filepath}: {e}", file=sys.stderr)
+        print(f"  [WARN] Failed to parse {filepath}: {e}", file=sys.stderr); _PARSE_WARNINGS.append(f"Failed to parse {filepath}: {e}")
     return findings
 
 
@@ -292,7 +288,7 @@ def parse_prowler_compliance_csv(filepath: str) -> list:
                               for k, v in row.items() if k}
                 records.append(normalized)
     except Exception as e:
-        print(f"  [WARN] Failed to parse compliance CSV {filepath}: {e}", file=sys.stderr)
+        print(f"  [WARN] Failed to parse compliance CSV {filepath}: {e}", file=sys.stderr); _PARSE_WARNINGS.append(f"Failed to parse compliance CSV {filepath}: {e}")
     return records
 
 
@@ -310,7 +306,7 @@ def parse_ocsf_json(filepath: str) -> list:
         with open(filepath, "r", encoding="utf-8", errors="replace") as fh:
             data = json.load(fh)
     except Exception as e:
-        print(f"  [WARN] Failed to parse OCSF JSON {filepath}: {e}", file=sys.stderr)
+        print(f"  [WARN] Failed to parse OCSF JSON {filepath}: {e}", file=sys.stderr); _PARSE_WARNINGS.append(f"Failed to parse OCSF JSON {filepath}: {e}")
         return findings
 
     if isinstance(data, dict):
@@ -385,7 +381,7 @@ def parse_security_hub_json(filepath: str) -> list:
         with open(filepath, "r", encoding="utf-8", errors="replace") as fh:
             data = json.load(fh)
     except Exception as e:
-        print(f"  [WARN] Failed to parse Security Hub JSON {filepath}: {e}", file=sys.stderr)
+        print(f"  [WARN] Failed to parse Security Hub JSON {filepath}: {e}", file=sys.stderr); _PARSE_WARNINGS.append(f"Failed to parse Security Hub JSON {filepath}: {e}")
         return findings
 
     if isinstance(data, dict):
@@ -486,14 +482,14 @@ def parse_prowler_html(filepath: str) -> list:
         with open(filepath, "r", encoding="utf-8", errors="replace") as fh:
             html = fh.read()
     except Exception as e:
-        print(f"  [WARN] Failed to read HTML {filepath}: {e}", file=sys.stderr)
+        print(f"  [WARN] Failed to read HTML {filepath}: {e}", file=sys.stderr); _PARSE_WARNINGS.append(f"Failed to read HTML {filepath}: {e}")
         return findings
 
     parser = _ProwlerHTMLTableParser()
     try:
         parser.feed(html)
     except Exception as e:
-        print(f"  [WARN] Failed to parse HTML {filepath}: {e}", file=sys.stderr)
+        print(f"  [WARN] Failed to parse HTML {filepath}: {e}", file=sys.stderr); _PARSE_WARNINGS.append(f"Failed to parse HTML {filepath}: {e}")
         return findings
 
     rows = parser.rows
@@ -542,7 +538,11 @@ def analyze_findings(all_findings: list) -> dict:
     pass_count = sum(1 for f in all_findings if f.get("STATUS", "").upper().startswith("PASS"))
     fail_count = sum(1 for f in all_findings if f.get("STATUS", "").upper().startswith("FAIL"))
 
-    security_score = round((pass_count / total) * 100, 1) if total > 0 else 0.0
+    # Score = PASS / (PASS + FAIL). Excludes non-actionable statuses (MANUAL/INFO/MUTED)
+    # from the denominator so they don't artificially deflate the score. total_checks
+    # (reported separately) still reflects every check that ran.
+    scored = pass_count + fail_count
+    security_score = round((pass_count / scored) * 100, 1) if scored > 0 else 0.0
 
     failed = [f for f in all_findings if f.get("STATUS", "").upper().startswith("FAIL")]
 
@@ -575,7 +575,7 @@ def analyze_findings(all_findings: list) -> dict:
             "total_checks": len(p_all),
             "pass_count": p_pass,
             "fail_count": len(p_failed),
-            "security_score": round((p_pass / len(p_all)) * 100, 1) if p_all else 0.0,
+            "security_score": round((p_pass / (p_pass + len(p_failed))) * 100, 1) if (p_pass + len(p_failed)) > 0 else 0.0,
             "findings_by_severity": {
                 "critical": p_sev.get("Critical", 0),
                 "high": p_sev.get("High", 0),
@@ -649,6 +649,8 @@ def analyze_findings(all_findings: list) -> dict:
         "findings_by_provider": findings_by_provider,
         "top_failed_checks": top_failed_checks,
         "detailed_findings": detailed_findings[:500],
+        "detailed_findings_truncated": len(detailed_findings) > 500,
+        "detailed_findings_total": len(detailed_findings),
     }
 
 
@@ -707,11 +709,27 @@ def build_scope_mask(scope_ids: list) -> dict:
 
 def _mask_str(value: str, mapping: dict) -> str:
     """Replace every real identifier occurrence inside a string (covers ids
-    embedded in ARNs / resource URIs / free text)."""
+    embedded in ARNs / resource URIs / free text).
+
+    Hardening against partial/overlapping masks:
+      * Process identifiers LONGEST-FIRST so that if one id is a substring of
+        another (e.g. "12345" vs "12345678"), the longer one is masked first and
+        the shorter one can't corrupt it.
+      * Use a boundary-aware regex so an id is only replaced when it is NOT part
+        of a larger alphanumeric token. Boundaries treat non-[A-Za-z0-9] as
+        separators, so ids embedded in ARNs/URIs/paths (delimited by :/.-_ etc.)
+        are still masked, but an id that is merely a digit-substring of a longer
+        number/token is left intact.
+    """
     out = str(value)
-    for real, label in mapping.items():
-        if real and real in out:
-            out = out.replace(real, label)
+    # Longest id first; skip empties.
+    for real in sorted((r for r in mapping if r), key=len, reverse=True):
+        label = mapping[real]
+        if real in out:
+            # (?<![A-Za-z0-9]) real (?![A-Za-z0-9]) — surrounded by non-alphanumerics
+            # (or string edges), so it won't match inside a larger token.
+            out = re.sub(r"(?<![A-Za-z0-9])" + re.escape(real) + r"(?![A-Za-z0-9])",
+                         label, out)
     return out
 
 
@@ -766,8 +784,7 @@ def peek_provider(files: dict) -> str:
         try:
             with open(json_path, "r", encoding="utf-8", errors="replace") as fh:
                 start = fh.read(4000)
-            import re as _re
-            m = _re.search(r'"provider"\s*:\s*"([^"]+)"', start)
+            m = re.search(r'"provider"\s*:\s*"([^"]+)"', start)
             if m:
                 p = normalize_provider(m.group(1))
                 if p != "unknown":
@@ -971,7 +988,10 @@ def main():
         # Write the reverse mapping to a SEPARATE operator sidecar (NOT shipped to the
         # customer) next to the output, for the operator's own de-anonymization/verification.
         sidecar = os.path.join(os.path.dirname(output_json), "anon_map.json")
-        with open(sidecar, "w", encoding="utf-8") as mf:
+        # Write the real->label mapping with owner-only (0o600) permissions — on shared
+        # systems this prevents other users from reading the exact de-anonymization map.
+        _fd = os.open(sidecar, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(_fd, "w", encoding="utf-8") as mf:
             json.dump({"real_to_label": mask}, mf, indent=2)
         # Verify the shipped output (analysis.json content) contains NO real identifiers.
         leaks = verify_anonymization(output, mask)
@@ -980,6 +1000,11 @@ def main():
                   file=sys.stderr)
         else:
             print(f"   Anonymization applied and verified: {len(mask)} scope id(s) masked, 0 leaks.")
+
+    # Surface any parse warnings collected during this run into the output metadata,
+    # so incomplete results are visible to downstream consumers (not just on stderr).
+    if _PARSE_WARNINGS:
+        output["metadata"]["parse_warnings"] = list(_PARSE_WARNINGS)
 
     with open(output_json, "w", encoding="utf-8") as fh:
         json.dump(output, fh, indent=2, default=str)

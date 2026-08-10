@@ -29,7 +29,7 @@ def load_analysis(path: str) -> dict:
 
 def generate_html(data: dict, output_path: str):
     meta = data["metadata"]
-    customer = meta["customer"]
+    customer = html.escape(str(meta["customer"]))  # escaped: used raw in title/header
     scan_date = meta["scan_date"]
     scopes = meta.get("scopes_assessed", [])
     scope_term = meta.get("scope_term", "scope")
@@ -72,9 +72,14 @@ def _head(customer: str, scan_date: str, provider_labels: list) -> str:
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{customer} - Cloud Security Assessment Dashboard</title>
-<script src="https://cdn.jsdelivr.net/npm/highcharts@12.1.2/highcharts.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/highcharts@12.1.2/highcharts-more.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/highcharts@12.1.2/modules/solid-gauge.js"></script>
+<!-- Highcharts is pinned to 12.1.2 with Subresource Integrity (SRI) hashes below.
+     IMPORTANT: if you change the Highcharts version, you MUST regenerate the SRI
+     integrity="sha384-..." hashes for the new files, or browsers will block the
+     scripts and the charts will silently fail to load. Generate with, e.g.:
+       curl -s <cdn-url> | openssl dgst -sha384 -binary | openssl base64 -A -->
+<script src="https://cdn.jsdelivr.net/npm/highcharts@12.1.2/highcharts.js" integrity="sha384-tpQ9Jct0yKJo0Tk30P5SpTR7A2N1o3qcjTSeB9GUe3AOkiCuVEKjS1hHjHfzCLVg" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdn.jsdelivr.net/npm/highcharts@12.1.2/highcharts-more.js" integrity="sha384-7e9YekYbVeibelTksZ5pSClelAtxcfYvP7oSqqUd+Ll9OpL6myRftg6xNqrPWQ+Y" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdn.jsdelivr.net/npm/highcharts@12.1.2/modules/solid-gauge.js" integrity="sha384-3DyUReexxlqPxS326njEso2Hzm6Fp8ycxh6cbh6f3mHMKBnp7iaDd5RhvauY3JAu" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <style>
 * {{ margin: 0; padding: 0; box-sizing: border-box; }}
 body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f4f6f9; color: #1F2937; }}
@@ -224,7 +229,7 @@ def _provider_section(by_provider: dict) -> str:
         sev = info["findings_by_severity"]
         scope_term = info.get("scope_term", "scope")
         cards += f"""<div class="provider-card">
-  <h4><span class="provider-badge">{info['label']}</span></h4>
+  <h4><span class="provider-badge">{html.escape(str(info['label']))}</span></h4>
   <div class="pmetric"><strong>Security Score:</strong> {info['security_score']}%</div>
   <div class="pmetric"><strong>Total Checks:</strong> {info['total_checks']:,} (Pass {info['pass_count']:,} / Fail {info['fail_count']:,})</div>
   <div class="pmetric"><strong>Critical:</strong> {sev['critical']} &nbsp; <strong>High:</strong> {sev['high']} &nbsp; <strong>Medium:</strong> {sev['medium']} &nbsp; <strong>Low:</strong> {sev['low']}</div>
@@ -280,7 +285,7 @@ def _compliance_section(compliance: dict) -> str:
         rate = info.get("pass_rate", 0)
         color = "#388e3c" if rate >= 80 else "#f57c00" if rate >= 50 else "#d32f2f"
         cards += f"""<div class="compliance-card">
-  <h4>{fw}</h4>
+  <h4>{html.escape(str(fw))}</h4>
   <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: {info['pass']} / {info['total']} ({rate}%)</div>
   <div class="bar"><div class="bar-fill" style="width:{rate}%;background:{color};"></div></div>
 </div>\n"""
@@ -349,8 +354,8 @@ def _roadmap_section() -> str:
 
 
 def _footer(scan_date: str, scopes: list, scope_term: str, provider_labels: list) -> str:
-    scope_str = ", ".join(scopes) if scopes else "N/A"
-    providers_str = ", ".join(provider_labels) if provider_labels else "Multi-Cloud"
+    scope_str = html.escape(", ".join(scopes)) if scopes else "N/A"
+    providers_str = html.escape(", ".join(provider_labels)) if provider_labels else "Multi-Cloud"
     return f"""
 </div><!-- end container -->
 <div class="footer">

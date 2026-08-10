@@ -13,23 +13,7 @@ import argparse
 import json
 import os
 import sys
-
-
-PROVIDER_CLI = {
-    "aws": "aws",
-    "azure": "az",
-    "gcp": "gcloud",
-    "oci": "oci",
-}
-
-PROVIDER_LABEL = {"aws": "AWS", "azure": "Azure", "gcp": "GCP", "oci": "OCI"}
-
-SCOPE_TERM = {
-    "aws": "account",
-    "azure": "subscription",
-    "gcp": "project",
-    "oci": "tenancy",
-}
+from providers import PROVIDER_LABELS as PROVIDER_LABEL, PROVIDER_SCOPE_TERM as SCOPE_TERM, PROVIDER_CLI
 
 
 def load_analysis(path: str) -> dict:
@@ -151,6 +135,11 @@ def generate_readme(data: dict, output_path: str):
     s.append("```bash")
     s.append("terraform destroy")
     s.append("```\n")
+    s.append("> **Note:** Security-critical resources (e.g. CloudTrail trails, KMS/CMEK keys) are "
+             "protected with `lifecycle { prevent_destroy = true }` and will cause `terraform destroy` "
+             "to error by design. To remove them, first remove the `prevent_destroy` line from the "
+             "relevant module (or `terraform state rm` the resource), then destroy. This is intentional — "
+             "it prevents accidental deletion of audit logs and encryption keys.\n")
 
     s.append("## Post-Deployment Validation\n")
     s.append("After deploying, validate by:\n")
