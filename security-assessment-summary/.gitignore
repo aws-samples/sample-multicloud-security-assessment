@@ -11,7 +11,6 @@ venv/
 
 # Node
 node_modules/
-package-lock.json
 npm-debug.log*
 
 # Generated assessment output (do not commit customer data / deliverables)
@@ -22,7 +21,3 @@ output/
 analysis.json
 anon_map.json
 charts/
-
-# Exception: sample deliverables included for documentation
-!samples/*.pdf
-!samples/*.html

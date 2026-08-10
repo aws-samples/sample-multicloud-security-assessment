@@ -75,10 +75,10 @@ identifiers automatically. A verification pass reports 0 leaks.
 Run the analysis script:
 ```bash
 # Default (show real identifiers):
-python3 scripts/analyze_security_data.py "<input_folder>" "<output_dir>/analysis.json" --customer "<Customer>"
+python3 ../python-script/scripts/analyze_security_data.py "<input_folder>" "<output_dir>/analysis.json" --customer "<Customer>"
 
 # Anonymized (mask all scope identifiers):
-python3 scripts/analyze_security_data.py "<input_folder>" "<output_dir>/analysis.json" --customer "<Customer>" --anonymize
+python3 ../python-script/scripts/analyze_security_data.py "<input_folder>" "<output_dir>/analysis.json" --customer "<Customer>" --anonymize
 ```
 
 **CRITICAL**: Prowler CSVs use semicolon (`;`) as delimiter, NOT comma.
@@ -99,7 +99,7 @@ Generate an interactive HTML dashboard with:
 
 Run:
 ```bash
-python3 scripts/generate_dashboard.py "<output_dir>/analysis.json" "<output_dir>/reports/<Customer>_Security_Dashboard.html"
+python3 ../python-script/scripts/generate_dashboard.py "<output_dir>/analysis.json" "<output_dir>/reports/<Customer>_Security_Dashboard.html"
 ```
 
 **Use CDN Highcharts**: `https://cdn.jsdelivr.net/npm/highcharts@12.1.2/`
@@ -122,12 +122,12 @@ Generate a PowerPoint presentation with a neutral dark-slate header:
 
 First generate chart PNGs:
 ```bash
-python3 scripts/generate_charts.py "<output_dir>/analysis.json" "<output_dir>/charts/"
+python3 ../python-script/scripts/generate_charts.py "<output_dir>/analysis.json" "<output_dir>/charts/"
 ```
 
 Then build the PPTX:
 ```bash
-cd scripts && npm install pptxgenjs && node generate_pptx.js "<output_dir>/analysis.json" "<output_dir>/charts/" "<output_dir>/reports/<Customer>_Security_Assessment_Deck.pptx"
+cd ../python-script/scripts && npm install && node generate_pptx.js "<output_dir>/analysis.json" "<output_dir>/charts/" "<output_dir>/reports/<Customer>_Security_Assessment_Deck.pptx"
 ```
 
 **Branding**: Use a neutral dark-slate header (#1F2937) with title text only. Do NOT
@@ -156,7 +156,7 @@ the correct provider block (aws / azurerm / google / oci) per detected cloud.
 
 Run:
 ```bash
-python3 scripts/generate_iac.py "<output_dir>/analysis.json" "<selections>" "<output_dir>/iac/"
+python3 ../python-script/scripts/generate_iac.py "<output_dir>/analysis.json" "<selections>" "<output_dir>/iac/"
 ```
 
 Force a specific provider with `--provider aws|azure|gcp|oci` if needed.
@@ -186,7 +186,7 @@ Generate a comprehensive README tying all deliverables together:
 
 Run:
 ```bash
-python3 scripts/generate_readme.py "<output_dir>/analysis.json" "<output_dir>/<Customer>_README.md"
+python3 ../python-script/scripts/generate_readme.py "<output_dir>/analysis.json" "<output_dir>/<Customer>_README.md"
 ```
 
 ### Step 9: Generate Remediation Plan (PDF) & Summarize
@@ -197,7 +197,7 @@ analysis, success metrics, IaC appendix with review disclaimer).
 
 Run:
 ```bash
-python3 scripts/generate_pdf.py "<output_dir>/analysis.json" "<output_dir>/<Customer>_Security_Remediation_Plan.pdf"
+python3 ../python-script/scripts/generate_pdf.py "<output_dir>/analysis.json" "<output_dir>/<Customer>_Security_Remediation_Plan.pdf"
 ```
 
 Then present the user with a summary of all generated files:
@@ -234,27 +234,34 @@ Critical: X | High: X | Medium: X | Low: X
 
 ## Dependencies
 
+**This agent is a thin wrapper.** The runnable scripts live in the sibling
+`python-script/scripts/` folder (single source of truth) — this agent invokes them
+via relative paths (`../python-script/scripts/`). Ensure the `python-script/` folder
+is present alongside `kiro-agent/`.
+
 Python packages (install if not present):
-- pandas
 - matplotlib
+- numpy
 - reportlab
 
-Node packages (install in scripts/ dir):
+Node package (install once in `../python-script/scripts/`):
 - pptxgenjs
 
 ## File Layout
 
 ```
 kiro-agent/
-├── agent.md                          # This file - agent definition
-├── scripts/
-│   ├── analyze_security_data.py      # Data analysis (multi-cloud, multi-format)
-│   ├── generate_dashboard.py         # HTML dashboard
-│   ├── generate_charts.py            # Chart PNGs for PPTX
-│   ├── generate_pptx.js              # PPTX deck (Node.js)
-│   ├── generate_iac.py               # Terraform templates (aws/azurerm/google/oci)
-│   ├── generate_readme.py            # README
-│   ├── generate_pdf.py               # PDF remediation plan
-│   └── package.json                  # Node dependencies
+├── agent.md                          # This file - agent definition (thin wrapper)
 └── README.md                         # Agent usage documentation
+
+# Runnable scripts are shared from the sibling folder (single source of truth):
+../python-script/scripts/
+├── analyze_security_data.py          # Data analysis (multi-cloud, multi-format)
+├── generate_dashboard.py             # HTML dashboard
+├── generate_charts.py                # Chart PNGs for PPTX
+├── generate_pptx.js                  # PPTX deck (Node.js)
+├── generate_iac.py                   # Terraform templates (aws/azurerm/google/oci)
+├── generate_readme.py                # README
+├── generate_pdf.py                   # PDF remediation plan
+└── package.json                      # Node dependencies
 ```

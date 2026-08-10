@@ -1,5 +1,9 @@
 # Cloud Security Assessment - Kiro Agent
 
+> **Requires the sibling `python-script/` folder.** This Kiro agent is a thin
+> conversational wrapper that runs the shared scripts in `../python-script/scripts/`.
+> Download/clone both folders together (or the whole repo).
+
 A Kiro CLI agent that analyzes multi-cloud **Prowler security assessment outputs**
 (AWS, Azure, GCP, OCI) and generates comprehensive **customer-facing deliverables**.
 
@@ -15,20 +19,20 @@ A Kiro CLI agent that analyzes multi-cloud **Prowler security assessment outputs
 
 ## Requirements
 
-- **Python 3.9+** with packages: `pandas`, `matplotlib`, `reportlab`
+- **Python 3.9+** with packages: `matplotlib`, `numpy`, `reportlab`
 - **Node.js 18+** with package: `pptxgenjs`
 - **Kiro CLI** installed and configured
 
 ### Install Python dependencies
 
 ```bash
-pip3 install pandas matplotlib reportlab
+pip3 install matplotlib numpy reportlab
 ```
 
 ### Install Node dependencies
 
 ```bash
-cd scripts
+cd ../python-script/scripts
 npm install
 ```
 
@@ -75,7 +79,11 @@ The agent will ask for:
     └── <Customer>_<provider>_<capability>.tf
 ```
 
-## Scripts
+## Scripts (shared from `../python-script/scripts/`)
+
+> This agent is a **thin wrapper** — it does not bundle its own scripts. The runnable
+> code lives in the sibling `python-script/scripts/` folder (single source of truth),
+> which must be present alongside `kiro-agent/`. The agent invokes it via relative paths.
 
 | Script | Purpose | Language |
 |--------|---------|----------|
@@ -93,27 +101,27 @@ You can run the scripts directly:
 
 ```bash
 # 1. Analyze Prowler output
-python3 scripts/analyze_security_data.py ./prowler-output ./output/analysis.json --customer "Acme Corp"
+python3 ../python-script/scripts/analyze_security_data.py ./prowler-output ./output/analysis.json --customer "Acme Corp"
 # Add --anonymize to mask account/subscription/project/tenancy IDs (Scope A, Scope B, ...) everywhere:
-# python3 scripts/analyze_security_data.py ./prowler-output ./output/analysis.json --customer "Acme Corp" --anonymize
+# python3 ../python-script/scripts/analyze_security_data.py ./prowler-output ./output/analysis.json --customer "Acme Corp" --anonymize
 
 # 2. Generate HTML dashboard
-python3 scripts/generate_dashboard.py ./output/analysis.json "./output/reports/Acme Corp_Security_Dashboard.html"
+python3 ../python-script/scripts/generate_dashboard.py ./output/analysis.json "./output/reports/Acme Corp_Security_Dashboard.html"
 
 # 3. Generate chart PNGs
-python3 scripts/generate_charts.py ./output/analysis.json ./output/charts/
+python3 ../python-script/scripts/generate_charts.py ./output/analysis.json ./output/charts/
 
 # 4. Generate PPTX deck
-cd scripts && node generate_pptx.js ../output/analysis.json ../output/charts/ "../output/reports/Acme Corp_Security_Assessment_Deck.pptx" && cd ..
+cd ../python-script/scripts && node generate_pptx.js ../output/analysis.json ../output/charts/ "../output/reports/Acme Corp_Security_Assessment_Deck.pptx" && cd ..
 
 # 5. Generate Terraform (provider auto-detected; override with --provider)
-python3 scripts/generate_iac.py ./output/analysis.json "object_storage_public_access,identity_mfa,audit_logging,flow_logs" ./output/iac/
+python3 ../python-script/scripts/generate_iac.py ./output/analysis.json "object_storage_public_access,identity_mfa,audit_logging,flow_logs" ./output/iac/
 
 # 6. Generate README
-python3 scripts/generate_readme.py ./output/analysis.json "./output/Acme Corp_README.md"
+python3 ../python-script/scripts/generate_readme.py ./output/analysis.json "./output/Acme Corp_README.md"
 
 # 7. Generate PDF
-python3 scripts/generate_pdf.py ./output/analysis.json "./output/Acme Corp_Security_Remediation_Plan.pdf"
+python3 ../python-script/scripts/generate_pdf.py ./output/analysis.json "./output/Acme Corp_Security_Remediation_Plan.pdf"
 ```
 
 ## Terraform Review Disclaimer

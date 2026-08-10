@@ -4,6 +4,6 @@
   "description": "PPTX deck generator for the Cloud Security Assessment tool",
   "private": true,
   "dependencies": {
-    "pptxgenjs": "^3.12.0"
+    "pptxgenjs": "3.12.0"
   }
 }
