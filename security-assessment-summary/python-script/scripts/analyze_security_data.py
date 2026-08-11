@@ -116,11 +116,15 @@ def detect_scope_ids(folder_path: str) -> list:
 
 def _is_compliance_json(filepath: Path) -> bool:
     """True if a .json is a per-framework compliance export rather than a main
-    OCSF findings file. Detected by a compliance/ path or a framework-suffixed stem
-    (the main per-scan file is exactly prowler-output-<id>-<ts>.ocsf.json — no extra
-    _<framework> segment before the extension)."""
+    OCSF findings file. Detected by a compliance/ immediate parent directory or a
+    framework-suffixed stem (the main per-scan file is exactly
+    prowler-output-<id>-<ts>.ocsf.json — no extra _<framework> segment before the
+    extension). Only checks the filename and immediate parent to avoid false positives
+    when the full path contains 'compliance' (e.g. Acme-Compliance-2026/)."""
     name = filepath.name
-    if "compliance" in str(filepath).lower():
+    # Check only the immediate parent directory, not the full path
+    parent_name = filepath.parent.name.lower()
+    if parent_name == "compliance":
         return True
     stem = name
     for ext in (".ocsf.json", ".json"):
@@ -611,7 +615,14 @@ def analyze_findings(all_findings: list) -> dict:
             }
 
     top_failed_checks = []
-    for check_id, count in check_counter.most_common(25):
+    # Sort by severity (Critical first) then by count descending, so all criticals
+    # appear before lower-severity checks regardless of occurrence count.
+    _severity_rank = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
+    ranked = sorted(check_counter.items(),
+                    key=lambda item: (_severity_rank.get(
+                        check_details[item[0]].get("severity", "").capitalize(), 99),
+                        -item[1]))
+    for check_id, count in ranked[:25]:
         entry = dict(check_details[check_id])
         entry["count"] = count
         top_failed_checks.append(entry)
@@ -903,11 +914,14 @@ def main():
     print("[2/4] Parsing findings (one source per scan group; distinct scans all kept)...")
 
     def _scan_stem(path):
-        b = os.path.basename(path)
+        """Key on path relative to input folder so same-named files in different
+        subdirectories are treated as separate scans (not collapsed or suppressed)."""
+        rel = os.path.relpath(path, input_folder)
+        b = os.path.basename(rel)
         for ext in (".ocsf.json", ".csv", ".html", ".json"):
             if b.lower().endswith(ext):
-                return b[: -len(ext)]
-        return os.path.splitext(b)[0]
+                return os.path.join(os.path.dirname(rel), b[: -len(ext)])
+        return os.path.join(os.path.dirname(rel), os.path.splitext(b)[0])
 
     # Build scan groups: stem -> {format: [paths]}
     groups = {}
@@ -953,10 +967,11 @@ def main():
     scope_term = scope_term_for_providers(providers)
 
     # Prefer scope ids discovered inside the findings; fall back to filename detection.
+    # Use UNION (not OR) so that accounts appearing only in filenames are still masked.
     scope_ids_in_data = sorted({
         s for prov in analysis["findings_by_provider"].values() for s in prov["scopes"]
     })
-    effective_scopes = scope_ids_in_data or scope_ids
+    effective_scopes = sorted(set(scope_ids_in_data) | set(scope_ids))
 
     customer = args.customer or "Customer"
     output = {
@@ -1000,7 +1015,10 @@ def main():
         output["metadata"]["scope_labels"] = sorted(mask.values())
         # Write the reverse mapping to a SEPARATE operator sidecar (NOT shipped to the
         # customer) next to the output, for the operator's own de-anonymization/verification.
-        sidecar = os.path.join(os.path.dirname(output_json), "anon_map.json")
+        # Placed in the PARENT of the output directory so it's outside the deliverables
+        # folder that gets zipped and sent to the customer.
+        _output_parent = os.path.dirname(os.path.dirname(output_json)) or "."
+        sidecar = os.path.join(_output_parent, "anon_map.json")
         # Write the real->label mapping with owner-only (0o600) permissions — on shared
         # systems this prevents other users from reading the exact de-anonymization map.
         _fd = os.open(sidecar, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)

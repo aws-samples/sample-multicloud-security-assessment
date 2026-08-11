@@ -64,7 +64,7 @@ Parse all identified files and produce structured analysis:
 - Findings by service (top 10)
 - Top failed checks with remediation info
 - Compliance framework coverage
-- Security score: `(pass_count / total_checks) * 100`
+- Security score: `(pass_count / (pass_count + fail_count)) * 100` (excludes MANUAL/INFO/MUTED from denominator)
 
 **REQUIRED — ask the user up front:** Should account/subscription/project/tenancy
 identifiers be anonymized in all deliverables? If yes, pass `--anonymize`, which

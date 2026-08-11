@@ -104,7 +104,9 @@ def build_pdf(data: dict, output_path: str, charts_dir: str = ""):
     top_checks = data["top_failed_checks"][:20]
     compliance = data.get("compliance_coverage", {})
 
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    output_dir = os.path.dirname(output_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
     doc = SimpleDocTemplate(
         output_path, pagesize=letter,
         leftMargin=0.75 * inch, rightMargin=0.75 * inch,
