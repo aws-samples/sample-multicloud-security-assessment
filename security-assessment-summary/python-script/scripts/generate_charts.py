@@ -31,10 +31,11 @@ def load_analysis(path: str) -> dict:
 
 def generate_severity_donut(severity: dict, output_path: str):
     """Donut chart showing findings by severity."""
-    labels = ["Critical", "High", "Medium", "Low"]
+    labels = ["Critical", "High", "Medium", "Low", "Other"]
     values = [severity.get("critical", 0), severity.get("high", 0),
-              severity.get("medium", 0), severity.get("low", 0)]
-    colors = ["#d32f2f", "#f57c00", "#fbc02d", "#388e3c"]
+              severity.get("medium", 0), severity.get("low", 0),
+              severity.get("other", 0)]
+    colors = ["#d32f2f", "#f57c00", "#fbc02d", "#388e3c", "#9e9e9e"]
 
     non_zero = [(l, v, c) for l, v, c in zip(labels, values, colors) if v > 0]
     if not non_zero:
@@ -147,17 +148,20 @@ def generate_provider_bar(by_provider: dict, output_path: str):
         return  # Single-cloud: per-provider chart adds no value.
 
     labels = [by_provider[p]["label"] for p in providers]
-    crit = [by_provider[p]["findings_by_severity"]["critical"] for p in providers]
-    high = [by_provider[p]["findings_by_severity"]["high"] for p in providers]
-    med = [by_provider[p]["findings_by_severity"]["medium"] for p in providers]
-    low = [by_provider[p]["findings_by_severity"]["low"] for p in providers]
+    def _sev(key):
+        return [by_provider[p]["findings_by_severity"].get(key, 0) for p in providers]
+
+    series = [(_sev("critical"), "#d32f2f", "Critical"), (_sev("high"), "#f57c00", "High"),
+              (_sev("medium"), "#fbc02d", "Medium"), (_sev("low"), "#388e3c", "Low"),
+              (_sev("other"), "#9e9e9e", "Other")]
 
     fig, ax = plt.subplots(1, 1, figsize=(7, 4))
     import numpy as np
     idx = np.arange(len(labels))
     bottom = np.zeros(len(labels))
-    for vals, color, name in [(crit, "#d32f2f", "Critical"), (high, "#f57c00", "High"),
-                              (med, "#fbc02d", "Medium"), (low, "#388e3c", "Low")]:
+    for vals, color, name in series:
+        if not any(vals):
+            continue  # Skip empty severity bands so the legend stays readable.
         ax.bar(idx, vals, bottom=bottom, color=color, label=name)
         bottom += np.array(vals)
 

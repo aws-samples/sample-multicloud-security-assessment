@@ -21,3 +21,10 @@ output/
 analysis.json
 anon_map.json
 charts/
+
+# Exception: samples/ holds hand-checked, fully anonymized example deliverables that
+# are meant to be committed. Without these negations the patterns above match them,
+# so they would be dropped on any fresh `git add` (they currently survive only
+# because Git ignores .gitignore for already-tracked files).
+!samples/
+!samples/**

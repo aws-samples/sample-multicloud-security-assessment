@@ -40,7 +40,7 @@ Given a folder of Prowler output, the skill:
 
 1. Scans and identifies assessment files, and auto-detects the cloud provider(s) and account/scope identifiers
 2. Parses findings from CSV / OCSF JSON / Security Hub JSON / HTML into one normalized schema — severity, service, compliance mapping, remediation code
-3. Computes a security score `(pass / total) × 100`, overall and per provider/scope
+3. Computes a security score `(pass / (pass + fail)) × 100` (MANUAL/INFO/MUTED excluded from the denominator), overall and per provider/scope
 4. Optionally **anonymizes** account/subscription/project/tenancy identifiers (a required up-front choice), applied and verified across every artifact
 5. Generates the dashboard, deck, Terraform IaC, README, and PDF
 

@@ -51,8 +51,9 @@ def generate_readme(data: dict, output_path: str):
     s.append(f"**Cloud Provider(s):** {', '.join(provider_labels)}  ")
     s.append(f"**{scope_term.capitalize()}(s) Assessed:** {scope_str}  ")
     s.append(f"**Security Score:** {score}%  ")
+    _other_str = f" | **Other:** {severity['other']}" if severity.get("other") else ""
     s.append(f"**Critical:** {severity['critical']} | **High:** {severity['high']} | "
-             f"**Medium:** {severity['medium']} | **Low:** {severity['low']}\n")
+             f"**Medium:** {severity['medium']} | **Low:** {severity['low']}{_other_str}\n")
 
     s.append("## Overview\n")
     s.append(
@@ -94,6 +95,8 @@ def generate_readme(data: dict, output_path: str):
     s.append(f"| ⚠️ High | {severity['high']} | Week 1-2 |")
     s.append(f"| 📋 Medium | {severity['medium']} | Month 1 |")
     s.append(f"| ℹ️ Low | {severity['low']} | Ongoing |")
+    if severity.get("other"):
+        s.append(f"| ❔ Other | {severity['other']} | Triage |")
     s.append("")
 
     if len(providers) > 1 and data.get("summary", {}).get("findings_by_provider"):
@@ -114,10 +117,14 @@ def generate_readme(data: dict, output_path: str):
 
     if compliance:
         s.append("## Compliance Framework Coverage\n")
-        s.append("| Framework | Pass Rate | Pass | Fail | Total |")
-        s.append("|-----------|-----------|------|------|-------|")
+        # "Checks" columns count every check row across all assessed scopes; "Requirements"
+        # de-duplicates by requirement ID so it reflects the framework's real size.
+        s.append("| Framework | Pass Rate | Checks Passed | Checks Failed | Total Checks | Requirements Met |")
+        s.append("|-----------|-----------|---------------|---------------|--------------|------------------|")
         for fw, info in compliance.items():
-            s.append(f"| {fw} | {info['pass_rate']}% | {info['pass']} | {info['fail']} | {info['total']} |")
+            _req = (f"{info.get('requirements_passed', 0)} / {info['requirements_total']} "
+                    f"({info.get('requirements_pass_rate', 0)}%)") if info.get("requirements_total") else "—"
+            s.append(f"| {fw} | {info['pass_rate']}% | {info['pass']} | {info['fail']} | {info['total']} | {_req} |")
         s.append("")
 
     s.append("## Remediation Modules (Terraform)\n")

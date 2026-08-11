@@ -115,7 +115,9 @@ python3 ../python-script/scripts/generate_charts.py ./output/analysis.json ./out
 cd ../python-script/scripts && node generate_pptx.js ../output/analysis.json ../output/charts/ "../output/reports/Acme Corp_Security_Assessment_Deck.pptx" && cd ..
 
 # 5. Generate Terraform (provider auto-detected; override with --provider)
-python3 ../python-script/scripts/generate_iac.py ./output/analysis.json "object_storage_public_access,identity_mfa,audit_logging,flow_logs" ./output/iac/
+#    These capability names resolve on every provider. Provider-specific extras
+#    (e.g. flow_logs, which is AWS only) are skipped with an error on other clouds.
+python3 ../python-script/scripts/generate_iac.py ./output/analysis.json "object_storage_public_access,identity_mfa,audit_logging,key_management" ./output/iac/
 
 # 6. Generate README
 python3 ../python-script/scripts/generate_readme.py ./output/analysis.json "./output/Acme Corp_README.md"

@@ -299,10 +299,16 @@ def _compliance_section(compliance: dict) -> str:
     for fw, info in compliance.items():
         rate = info.get("pass_rate", 0)
         color = "#388e3c" if rate >= 80 else "#f57c00" if rate >= 50 else "#d32f2f"
+        # "total" is a check-row count summed across scopes, so label it as checks and
+        # show the de-duplicated requirement count separately when available.
+        _req_total = info.get("requirements_total")
+        _req_line = (f"""<div style="font-size:11px;color:#888;">Requirements met: """
+                     f"""{info.get('requirements_passed', 0)} / {_req_total} """
+                     f"""({info.get('requirements_pass_rate', 0)}%)</div>\n""") if _req_total else ""
         cards += f"""<div class="compliance-card">
   <h4>{html.escape(str(fw))}</h4>
-  <div style="font-size:12px;color:#666;margin-bottom:6px;">Pass: {info['pass']} / {info['total']} ({rate}%)</div>
-  <div class="bar"><div class="bar-fill" style="width:{rate}%;background:{color};"></div></div>
+  <div style="font-size:12px;color:#666;margin-bottom:6px;">Checks passed: {info['pass']} / {info['total']} ({rate}%)</div>
+  {_req_line}<div class="bar"><div class="bar-fill" style="width:{rate}%;background:{color};"></div></div>
 </div>\n"""
 
     return f"""

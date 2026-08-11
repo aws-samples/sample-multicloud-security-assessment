@@ -12,7 +12,7 @@ inputs:
   - name: output_folder_path
     description: "Path to folder where deliverables will be saved. If omitted, defaults to a per-provider assessment-summary-<provider>/ folder beside the input (holding reports/, README, remediation plan PDF, and iac/)."
     type: path
-    required: true
+    required: false
 tools: [run_python, file_write, open_in_session_tab, file_copy, file_read, run_javascript, file_edit, folder_create, file_move, folder_list]
 depends-on: [canvas_pptx, html_design, highcharts]
 ---
@@ -121,6 +121,7 @@ Prefer the **richest available source** per scan. Read at least one of the follo
 
 **E) Prowler compliance CSVs (framework coverage):**
 - Delimiter: semicolon (`;`); key columns: STATUS, CHECKID, REQUIREMENTS_ID, REQUIREMENTS_DESCRIPTION, REQUIREMENTS_ATTRIBUTES_SERVICE, REQUIREMENTS_ATTRIBUTES_SECTION, FRAMEWORK. Use for per-framework pass-rate reporting. Frameworks vary by cloud (e.g. CIS AWS/Azure/GCP/OCI benchmarks, Azure Security Benchmark, etc.).
+- **Two denominators — do not conflate them.** One CSV row is requirement x resource x region x scope, so a plain row count is a *check* count, not the framework's size, and it multiplies when several scopes are assessed (e.g. MITRE ATT&CK: ~45 requirements but 23,000+ rows across two accounts). Report check-level pass/fail/total (a valid scope-weighted rate) **and** a requirement-level count de-duplicated by REQUIREMENTS_ID, where a requirement passes only if no scope reported FAIL for it. Label them distinctly ("Total Checks" vs "Requirements Met") — never present a summed row count as framework coverage.
 
 **Compute security score:** (pass_count / (pass_count + fail_count)) * 100, reported overall and per provider/scope. Non-actionable statuses (MANUAL/INFO/MUTED) are excluded from the denominator so they don't artificially deflate the score.
 
@@ -145,7 +146,7 @@ Prefer the **richest available source** per scan. Read at least one of the follo
 Dashboard must include:
 1. KPI cards (Total Checks, Pass Rate %, Critical Findings, High Findings, Scopes Assessed — where "scope" = accounts/subscriptions/projects/tenancies)
 2. Security Score gauge (solid-gauge showing pass rate %)
-3. Findings by Severity chart (donut: Critical/High/Medium/Low)
+3. Findings by Severity chart (donut: Critical/High/Medium/Low, plus Other when non-zero)
 4. Findings by Service chart (top 10 services bar chart) — use the DETECTED provider's service names
 5. **Findings by Cloud Provider** (when >1 provider present): a breakdown chart by provider
 6. Top Failed Checks table (check_title, service, severity, count, risk description)
@@ -165,10 +166,12 @@ Dashboard must include:
 - **Tool**: `run_python` (matplotlib for charts) + `run_javascript` (pptxgenjs)
 - **Input**: Canonical dataset from Step 3/3a + customer info
 - **Output**: `{{output_folder_path}}/reports/{Customer}_Security_Assessment_Deck.pptx`
-- **Validate**: PPTX file created with 10-12 slides; if `anonymize=true`, NO real identifiers present
+- **Validate**: PPTX file created with 11 slides (see Step 5b); if `anonymize=true`, NO real identifiers present
 
 **Step 5a: Generate chart PNGs with matplotlib:**
-- Severity distribution donut (Critical/High/Medium/Low with counts)
+- Severity distribution donut (Critical/High/Medium/Low with counts, plus an "Other"
+  slice for findings whose severity is missing/unrecognized — include it only when
+  non-zero, so the donut always reconciles with the total failed-check count)
 - Top 10 services failure bar chart (detected provider's services)
 - Security score gauge
 - Compliance framework coverage bar chart
@@ -176,7 +179,7 @@ Dashboard must include:
 
 **Step 5b: Build PPTX with pptxgenjs (11 slides):**
 1. Title — "Cloud Security Assessment", customer name, provider(s) assessed, "Confidential" (neutral — no cloud logo)
-2. Executive Summary — KPI boxes (Score %, Critical, High, Medium, Low) + key insights
+2. Executive Summary — KPI boxes (Score %, Critical, High, Medium, Low, plus Other when non-zero) + key insights
 3. Severity Distribution — embedded chart + risk summary
 4. Findings by Service — embedded chart + top 5 services with descriptions (provider-appropriate)
 5. Critical & High Findings Detail — top 10 critical/high with risk + remediation
@@ -361,7 +364,7 @@ All generated **Terraform** modules MUST adhere to these standards (apply the eq
 - Use compliance/ subfolder CSVs for framework-specific coverage analysis (frameworks vary by cloud)
 - Leverage `REMEDIATION_CODE_TERRAFORM` from Prowler as the Terraform starting point
 - Group findings by: severity first, then service, then check_id
-- Calculate security score as: (PASS / total) * 100 — overall and per provider/scope
+- Calculate security score as: (pass_count / (pass_count + fail_count)) * 100 — overall and per provider/scope, with MANUAL/INFO/MUTED excluded from the denominator
 - Always present Critical findings first in all deliverables
 - Make anonymization a REQUIRED up-front choice; apply the mapping to the canonical dataset (Step 3a) and VERIFY across every artifact (Step 10 gate)
 - Use NEUTRAL branding (no cloud logo) on the dashboard, deck, and PDF
