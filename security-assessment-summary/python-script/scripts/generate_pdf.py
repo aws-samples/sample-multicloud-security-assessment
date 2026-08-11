@@ -156,6 +156,8 @@ def build_pdf(data: dict, output_path: str, charts_dir: str = ""):
            ["High", str(severity["high"])],
            ["Medium", str(severity["medium"])],
            ["Low", str(severity["low"])]]
+    if severity.get("other"):
+        kpi.append(["Other", str(severity["other"])])
     t = Table(kpi, colWidths=[3 * inch, 2 * inch])
     t.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), SLATE_DARK),
@@ -265,6 +267,10 @@ def build_pdf(data: dict, output_path: str, charts_dir: str = ""):
         ["Medium", str(severity["medium"]), Paragraph("Compliance gaps, misconfigurations", styles["BodyWrap"]), "Medium", "Month 1"],
         ["Low", str(severity["low"]), Paragraph("Best-practice deviations", styles["BodyWrap"]), "Low", "Ongoing"],
     ]
+    if severity.get("other"):
+        risk.append(["Other", str(severity["other"]),
+                     Paragraph("Unclassified severity — triage manually", styles["BodyWrap"]),
+                     "Triage", "Ongoing"])
     t = Table(risk, colWidths=[0.8 * inch, 0.6 * inch, 2.3 * inch, 0.9 * inch, 0.9 * inch])
     t.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), SLATE_DARK),
@@ -279,10 +285,15 @@ def build_pdf(data: dict, output_path: str, charts_dir: str = ""):
     # Compliance
     E.append(Paragraph("8. Compliance Gap Analysis", styles["SectionHead"]))
     if compliance:
-        comp = [["Framework", "Total", "Pass", "Fail", "Pass Rate"]]
+        # "Checks" totals sum every check row across all assessed scopes; "Reqs Met"
+        # de-duplicates by requirement ID so it reflects the framework's real size.
+        comp = [["Framework", "Checks", "Pass", "Fail", "Pass Rate", "Reqs Met"]]
         for fw, info in list(compliance.items())[:10]:
-            comp.append([fw, str(info["total"]), str(info["pass"]), str(info["fail"]), f"{info['pass_rate']}%"])
-        t = Table(comp, colWidths=[2.5 * inch, 1.0 * inch, 0.8 * inch, 0.8 * inch, 1.0 * inch])
+            _req = (f"{info.get('requirements_passed', 0)}/{info['requirements_total']}"
+                    if info.get("requirements_total") else "—")
+            comp.append([fw, str(info["total"]), str(info["pass"]), str(info["fail"]),
+                         f"{info['pass_rate']}%", _req])
+        t = Table(comp, colWidths=[2.2 * inch, 0.9 * inch, 0.7 * inch, 0.7 * inch, 0.9 * inch, 0.8 * inch])
         t.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), SLATE_DARK),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),

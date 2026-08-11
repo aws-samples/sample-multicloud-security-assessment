@@ -205,8 +205,10 @@ def _classify_csv(filepath: Path) -> str:
         # SERVICE_NAME use underscores; compliance uses CHECKID without one).
         if headers & {"CHECK_ID", "SEVERITY", "SERVICE_NAME"}:
             return "main"
-        # Fallback: files under a compliance/ folder are compliance exports.
-        if "compliance" in str(filepath).lower():
+        # Fallback: files directly inside a compliance/ folder are compliance exports.
+        # Only the immediate parent is checked (matching _is_compliance_json) so a
+        # customer folder like Acme-Compliance-2026/ doesn't misclassify every CSV.
+        if filepath.parent.name.lower() == "compliance":
             return "compliance"
     except Exception:
         pass
@@ -676,8 +678,23 @@ def analyze_findings(all_findings: list) -> dict:
 
 
 def analyze_compliance(compliance_records: list) -> dict:
-    """Analyze compliance CSV records to produce per-framework coverage."""
+    """Analyze compliance CSV records to produce per-framework coverage.
+
+    Two different denominators are reported, because they answer different questions:
+
+    * check-level (``total``/``pass``/``fail``/``pass_rate``) counts every CSV row,
+      i.e. requirement x resource x region x scope. When several scopes are assessed
+      these sum, so ``total`` is a check count and NOT the size of the framework.
+      ``pass_rate`` remains a valid scope-weighted rate.
+    * requirement-level (``requirements_*``) de-duplicates by REQUIREMENTS_ID so the
+      denominator is the framework's actual requirement count regardless of how many
+      scopes were scanned. A requirement counts as passing only if no scope reported
+      a FAIL for it. This is what "framework coverage" normally means.
+    """
     frameworks = defaultdict(lambda: {"total": 0, "pass": 0, "fail": 0})
+    # requirement id -> True while every observed row passes; False once any FAIL is seen
+    req_status = defaultdict(dict)
+    scopes = defaultdict(set)
     for rec in compliance_records:
         fw = rec.get("FRAMEWORK", "Unknown")
         frameworks[fw]["total"] += 1
@@ -686,16 +703,33 @@ def analyze_compliance(compliance_records: list) -> dict:
             frameworks[fw]["pass"] += 1
         elif status.startswith("FAIL"):
             frameworks[fw]["fail"] += 1
+        scope = rec.get("ACCOUNTID") or rec.get("SUBSCRIPTIONID") or rec.get("PROJECTID")
+        if scope:
+            scopes[fw].add(scope)
+        req_id = rec.get("REQUIREMENTS_ID")
+        if req_id:
+            if status.startswith("FAIL"):
+                req_status[fw][req_id] = False
+            else:
+                req_status[fw].setdefault(req_id, True)
 
     result = {}
     for fw, counts in frameworks.items():
         total = counts["total"]
         pass_rate = round((counts["pass"] / total) * 100, 1) if total > 0 else 0.0
+        reqs = req_status.get(fw, {})
+        req_total = len(reqs)
+        req_passed = sum(1 for ok in reqs.values() if ok)
+        req_rate = round((req_passed / req_total) * 100, 1) if req_total > 0 else 0.0
         result[fw] = {
             "total": total,
             "pass": counts["pass"],
             "fail": counts["fail"],
             "pass_rate": pass_rate,
+            "requirements_total": req_total,
+            "requirements_passed": req_passed,
+            "requirements_pass_rate": req_rate,
+            "scopes_counted": len(scopes.get(fw, ())),
         }
     return result
 
@@ -877,12 +911,16 @@ def main():
     else:
         output_json = os.path.join(output_dir, "analysis.json")
 
-    os.makedirs(os.path.dirname(output_json), exist_ok=True)
+    _output_json_dir = os.path.dirname(output_json)
+    if _output_json_dir:
+        os.makedirs(_output_json_dir, exist_ok=True)
     print(f"       Detected provider (for default folder): {_provider or 'unknown'}")
     print(f"       Output directory: {output_dir}")
 
     print(f"[1/4] Scanning files in: {input_folder}")
-    files = identify_files(input_folder)
+    # Reuse the provider-peek scan — identify_files() walks the whole input tree and
+    # the folder hasn't changed since, so a second walk would be pure duplicated I/O.
+    files = _peek_files
     scope_ids = detect_scope_ids(input_folder)
 
     file_count = sum(len(v) for v in files.values())
@@ -997,6 +1035,10 @@ def main():
         "top_failed_checks": analysis["top_failed_checks"],
         "compliance_coverage": compliance_coverage,
         "detailed_findings": analysis["detailed_findings"],
+        # detailed_findings is capped at 500 rows; carry the flag + true count through so
+        # consumers can say "showing 500 of N" instead of implying the list is complete.
+        "detailed_findings_truncated": analysis["detailed_findings_truncated"],
+        "detailed_findings_total": analysis["detailed_findings_total"],
     }
 
     # Optional anonymization: mask every scope identifier across the ENTIRE output

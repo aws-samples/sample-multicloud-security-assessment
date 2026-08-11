@@ -60,10 +60,13 @@ If the customer/organization name cannot be determined, ask the user.
 Parse all identified files and produce structured analysis:
 - Total checks, pass/fail counts
 - Provider(s) detected + per-provider breakdown
-- Findings by severity (Critical/High/Medium/Low)
+- Findings by severity (Critical/High/Medium/Low, plus an "Other" bucket for
+  missing/unrecognized severities — surfaced in deliverables only when non-zero)
 - Findings by service (top 10)
 - Top failed checks with remediation info
-- Compliance framework coverage
+- Compliance framework coverage — reported two ways: check-level counts (every CSV
+  row, summed across scopes) and a requirement-level count de-duplicated by
+  REQUIREMENTS_ID. A summed row count is NOT the framework's size.
 - Security score: `(pass_count / (pass_count + fail_count)) * 100` (excludes MANUAL/INFO/MUTED from denominator)
 
 **REQUIRED — ask the user up front:** Should account/subscription/project/tenancy
@@ -114,11 +117,11 @@ Generate a PowerPoint presentation with a neutral dark-slate header:
 5. Critical & High Findings Detail - top findings with remediation
 6. Remediation: Immediate Actions - Critical findings
 7. Remediation: Short-Term Actions - High severity
-8. Compliance Framework Coverage
-9. Per-Provider Breakdown (only when multiple providers present)
-10. Implementation Roadmap - 4 phases
-11. Best Practices & Next Steps
-12. Thank You / Closing
+8. Compliance Framework Coverage - compliance chart, or the per-provider breakdown
+   chart as a fallback when there is no compliance data and multiple providers exist
+9. Implementation Roadmap - 4 phases
+10. Best Practices & Next Steps
+11. Thank You / Closing
 
 First generate chart PNGs:
 ```bash
@@ -143,8 +146,12 @@ provider block per detected cloud):
 - `network_ingress` - restrict unrestricted ingress (no 0.0.0.0/0)
 - `disk_db_encryption` - encryption at rest for disks and databases
 - `audit_logging` - management/activity logs (multi-region)
-- `flow_logs` - network flow logs
+- `flow_logs` - network flow logs (**AWS only** — omit this option for Azure/GCP/OCI)
 - `key_management` - customer-managed key rotation
+
+Only offer capabilities available for the detected provider(s). Selections the
+generator cannot resolve are reported as errors and skipped; if none resolve it
+exits non-zero without generating anything.
 
 Wait for the user's selection before proceeding.
 
@@ -214,7 +221,7 @@ Generated deliverables (output/):
     └── <Customer>_<provider>_*.tf
 
 Providers: <detected> | Security Score: XX%
-Critical: X | High: X | Medium: X | Low: X
+Critical: X | High: X | Medium: X | Low: X [| Other: X when non-zero]
 ```
 
 ## Key Rules
@@ -228,7 +235,7 @@ Critical: X | High: X | Medium: X | Low: X
 7. **PPTX layout**: Always `LAYOUT_16x9` (10"x5.625") - never LAYOUT_WIDE
 8. **Provider-aware**: detect providers, add per-provider breakdown, use "scope" terminology
 9. **Critical findings first** in all deliverables
-10. **Security score** = (pass / total) x 100
+10. **Security score** = (pass_count / (pass_count + fail_count)) x 100 — MANUAL/INFO/MUTED excluded from the denominator
 11. **Never hardcode credentials** in IaC scripts
 12. **Terraform review disclaimer** must appear in generated IaC, README, and PDF
 
@@ -238,6 +245,19 @@ Critical: X | High: X | Medium: X | Low: X
 `python-script/scripts/` folder (single source of truth) — this agent invokes them
 via relative paths (`../python-script/scripts/`). Ensure the `python-script/` folder
 is present alongside `kiro-agent/`.
+
+**Working directory:** every `../python-script/scripts/...` path in this file is
+relative to the `kiro-agent/` folder. Either `cd` into `kiro-agent/` before running
+the commands, or resolve the scripts directory once and use it in place of the
+relative prefix:
+
+```bash
+SCRIPTS="$(cd "$(dirname "<path-to>/kiro-agent/agent.md")/../python-script/scripts" && pwd)"
+python3 "$SCRIPTS/analyze_security_data.py" ...
+```
+
+Note that the PPTX step `cd`s into the scripts directory, so any relative
+`<output_dir>` must be re-resolved (or made absolute) for that command.
 
 Python packages (install if not present):
 - matplotlib

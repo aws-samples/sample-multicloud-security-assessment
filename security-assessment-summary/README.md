@@ -55,7 +55,8 @@ A single input folder may contain scans from more than one cloud.
 
 ```bash
 pip3 install matplotlib numpy reportlab
-cd <variant>/scripts && npm install
+# pptxgenjs lives with the shared scripts; all three variants use this one install.
+cd python-script/scripts && npm install
 ```
 
 ## Quick Start

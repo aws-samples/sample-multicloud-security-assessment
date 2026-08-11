@@ -100,16 +100,26 @@ const kpis = [
   { label: "Medium", value: String(severity.medium), color: "B8860B" },
   { label: "Low", value: String(severity.low), color: "388E3C" },
 ];
+// Unclassified-severity findings only earn a card when present, so the row stays 5-up
+// for the common case and reconciles with the donut when it isn't.
+if (severity.other) kpis.push({ label: "Other", value: String(severity.other), color: "9E9E9E" });
+const kpiW = kpis.length > 5 ? 1.4 : 1.7;
+const kpiGap = kpis.length > 5 ? 1.55 : 1.9;
 kpis.forEach((kpi, i) => {
-  const x = 0.5 + i * 1.9;
-  slide.addShape(pres.ShapeType.roundRect, { x, y: 0.9, w: 1.7, h: 1.2, fill: { color: LIGHT_GRAY }, line: { color: "DDDDDD", width: 1 } });
-  slide.addText(kpi.value, { x, y: 1.0, w: 1.7, h: 0.7, fontSize: 24, bold: true, color: kpi.color, align: "center", valign: "middle" });
-  slide.addText(kpi.label, { x, y: 1.6, w: 1.7, h: 0.4, fontSize: 10, color: "666666", align: "center" });
+  const x = 0.5 + i * kpiGap;
+  slide.addShape(pres.ShapeType.roundRect, { x, y: 0.9, w: kpiW, h: 1.2, fill: { color: LIGHT_GRAY }, line: { color: "DDDDDD", width: 1 } });
+  slide.addText(kpi.value, { x, y: 1.0, w: kpiW, h: 0.7, fontSize: 24, bold: true, color: kpi.color, align: "center", valign: "middle" });
+  slide.addText(kpi.label, { x, y: 1.6, w: kpiW, h: 0.4, fontSize: 10, color: "666666", align: "center" });
 });
+// analyze_security_data.py caps findings_by_service at most_common(20);
+// only claim "N+" when the scan actually hit that cap.
+const SERVICE_CAP = 20;
+const serviceCount = Object.keys(summary.findings_by_service).length;
+const serviceCountLabel = serviceCount >= SERVICE_CAP ? `${serviceCount}+` : String(serviceCount);
 const insights = [
   `Total of ${summary.total_checks.toLocaleString()} security checks performed across ${providerLabels}`,
   `${severity.critical + severity.high} Critical/High findings require immediate attention`,
-  `${Object.keys(summary.findings_by_service).length}+ cloud services with security findings`,
+  `${serviceCountLabel} cloud services with security findings`,
 ];
 insights.forEach((text, i) => {
   slide.addText(`• ${text}`, { x: 0.7, y: 2.5 + i * 0.4, w: 8.7, h: 0.35, fontSize: 12, color: SLATE });
@@ -122,10 +132,14 @@ slide = pres.addSlide();
 addHeaderBand(slide, "Findings by Severity", 3);
 if (severityChart) slide.addImage({ path: severityChart, x: 0.5, y: 0.9, w: 4.5, h: 4.2 });
 slide.addText("Risk Summary", { x: 5.5, y: 1.0, w: 4, h: 0.4, fontSize: 14, bold: true, color: SLATE });
-slide.addText(
-  `• ${severity.critical} Critical findings — immediate action required\n• ${severity.high} High findings — address within 1-2 weeks\n• ${severity.medium} Medium findings — plan within 1 month\n• ${severity.low} Low findings — ongoing improvement`,
-  { x: 5.5, y: 1.5, w: 4, h: 2.5, fontSize: 11, color: "444444", valign: "top" }
-);
+const riskLines = [
+  `• ${severity.critical} Critical findings — immediate action required`,
+  `• ${severity.high} High findings — address within 1-2 weeks`,
+  `• ${severity.medium} Medium findings — plan within 1 month`,
+  `• ${severity.low} Low findings — ongoing improvement`,
+];
+if (severity.other) riskLines.push(`• ${severity.other} Other findings — unclassified severity, triage manually`);
+slide.addText(riskLines.join("\n"), { x: 5.5, y: 1.5, w: 4, h: 2.5, fontSize: 11, color: "444444", valign: "top" });
 
 // ---------------------------------------------------------------------------
 // Slide 4: Findings by Service
