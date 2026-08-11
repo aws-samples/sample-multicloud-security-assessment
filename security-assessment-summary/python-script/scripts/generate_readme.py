@@ -164,7 +164,9 @@ def generate_readme(data: dict, output_path: str):
     s.append("---\n")
     s.append(f"*Generated on {scan_date} by the Cloud Security Assessment tool.*\n")
 
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    output_dir = os.path.dirname(output_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as fh:
         fh.write("\n".join(s))
     print(f"✅ README generated → {output_path}")

@@ -37,6 +37,7 @@ If --provider is omitted, it is taken from the analysis JSON (first detected pro
 import argparse
 import json
 import os
+import re
 import sys
 from datetime import datetime
 
@@ -61,12 +62,12 @@ PROVIDER_TF = {
 }
 
 # Version-pinned required_providers per cloud. Pinning avoids surprise breakage when
-# a new major provider release changes/removes arguments (e.g. azurerm v4 removed
-# enable_https_traffic_only). The azuread provider is added dynamically when an Azure
-# identity remediation is selected (see generate_terraform).
+# a new major provider release changes/removes arguments. azurerm is pinned to ~> 4.0
+# because the storage module uses https_traffic_only_enabled (the v4 name; v3 used the
+# now-removed enable_https_traffic_only).
 REQUIRED_PROVIDERS = {
     "aws":   '\n    aws = {\n      source  = "hashicorp/aws"\n      version = "~> 5.0"\n    }',
-    "azure": '\n    azurerm = {\n      source  = "hashicorp/azurerm"\n      version = "~> 3.0"\n    }',
+    "azure": '\n    azurerm = {\n      source  = "hashicorp/azurerm"\n      version = "~> 4.0"\n    }',
     "gcp":   '\n    google = {\n      source  = "hashicorp/google"\n      version = "~> 5.0"\n    }',
     "oci":   '\n    oci = {\n      source  = "oracle/oci"\n      version = "~> 5.0"\n    }',
 }
@@ -450,43 +451,43 @@ def load_analysis(path: str) -> dict:
 PROVIDER_VARIABLES = {
     "aws": {
         "region": ("string", "us-east-1", "Target AWS region."),
-        "bucket_name": ("string", "", "Target S3 bucket name (for encryption config)."),
-        "kms_key_arn": ("string", "", "KMS key ARN for encryption at rest."),
-        "vpc_id": ("string", "", "VPC ID for security group / flow logs."),
+        "bucket_name": ("string", None, "Target S3 bucket name (for encryption config)."),
+        "kms_key_arn": ("string", None, "KMS key ARN for encryption at rest."),
+        "vpc_id": ("string", None, "VPC ID for security group / flow logs."),
         "allowed_cidr": ("string", "10.0.0.0/8", "Allowed ingress CIDR (no 0.0.0.0/0)."),
-        "log_bucket_name": ("string", "", "S3 bucket name for CloudTrail logs."),
-        "flow_log_role_arn": ("string", "", "IAM role ARN for VPC flow logs."),
+        "log_bucket_name": ("string", None, "S3 bucket name for CloudTrail logs."),
+        "flow_log_role_arn": ("string", None, "IAM role ARN for VPC flow logs."),
     },
     "azure": {
         "location": ("string", "eastus", "Azure location."),
-        "resource_group_name": ("string", "", "Azure resource group name."),
-        "storage_account_name": ("string", "", "Storage account name."),
-        "key_vault_name": ("string", "", "Key Vault name."),
-        "tenant_id": ("string", "", "Entra ID tenant ID."),
-        "subscription_id": ("string", "", "Azure subscription resource ID."),
-        "sql_server_id": ("string", "", "Azure SQL server resource ID."),
-        "log_analytics_workspace_id": ("string", "", "Log Analytics workspace ID."),
+        "resource_group_name": ("string", None, "Azure resource group name."),
+        "storage_account_name": ("string", None, "Storage account name."),
+        "key_vault_name": ("string", None, "Key Vault name."),
+        "tenant_id": ("string", None, "Entra ID tenant ID."),
+        "subscription_id": ("string", None, "Azure subscription resource ID."),
+        "sql_server_id": ("string", None, "Azure SQL server resource ID."),
+        "log_analytics_workspace_id": ("string", None, "Log Analytics workspace ID."),
     },
     "gcp": {
         "project_id": ("string", None, "GCP project ID."),
         "region": ("string", "us-central1", "GCP region."),
-        "bucket_name": ("string", "", "Cloud Storage bucket name."),
+        "bucket_name": ("string", None, "Cloud Storage bucket name."),
         "network": ("string", "default", "VPC network name."),
         "allowed_cidr": ("string", "10.0.0.0/8", "Allowed ingress CIDR (no 0.0.0.0/0)."),
-        "key_ring_id": ("string", "", "KMS key ring ID."),
+        "key_ring_id": ("string", None, "KMS key ring ID."),
         "permissions": ("list(string)", [], "Custom role permissions."),
     },
     "oci": {
         "region": ("string", "us-ashburn-1", "OCI region."),
         "tenancy_ocid": ("string", None, "OCI tenancy OCID."),
-        "compartment_ocid": ("string", "", "Compartment OCID."),
-        "bucket_name": ("string", "", "Object Storage bucket name."),
-        "namespace": ("string", "", "Object Storage namespace."),
-        "vcn_id": ("string", "", "VCN OCID."),
+        "compartment_ocid": ("string", None, "Compartment OCID."),
+        "bucket_name": ("string", None, "Object Storage bucket name."),
+        "namespace": ("string", None, "Object Storage namespace."),
+        "vcn_id": ("string", None, "VCN OCID."),
         "allowed_cidr": ("string", "10.0.0.0/8", "Allowed ingress CIDR (no 0.0.0.0/0)."),
-        "kms_key_id": ("string", "", "Vault key OCID for volume encryption."),
-        "management_endpoint": ("string", "", "Vault management endpoint."),
-        "availability_domain": ("string", "", "Availability domain."),
+        "kms_key_id": ("string", None, "Vault key OCID for volume encryption."),
+        "management_endpoint": ("string", None, "Vault management endpoint."),
+        "availability_domain": ("string", None, "Availability domain."),
         "policy_statements": ("list(string)", [], "IAM policy statements."),
     },
 }
@@ -547,13 +548,15 @@ def _render_tfvars_example(provider: str, customer: str) -> str:
 def _render_locals_tf(customer: str, provider: str) -> str:
     """Shared locals.tf with tags/labels appropriate to the provider."""
     key = "labels" if provider == "gcp" else "tags"
+    # Escape customer name for safe HCL embedding (quotes, backslashes, dollar signs)
+    safe_customer = customer.replace("\\", "\\\\").replace('"', '\\"').replace("$", "$$")
     return (
         "# Shared tags/labels applied by the remediation modules.\n"
         f'locals {{\n  {key} = {{\n'
         f'    Environment = var.environment\n'
         f'    ManagedBy   = "Terraform"\n'
         f'    Purpose     = "SecurityRemediation"\n'
-        f'    Customer    = "{customer}"\n'
+        f'    Customer    = "{safe_customer}"\n'
         f'  }}\n}}\n'
     )
 
@@ -572,8 +575,7 @@ NEUTRAL_ALIASES = {
                            "gcp": "cmek_encryption", "oci": "volume_db_encryption"},
     "audit_logging": {"aws": "audit_logging", "azure": "activity_log", "gcp": "audit_logs",
                       "oci": "audit_logging"},
-    "flow_logs": {"aws": "flow_logs", "azure": "activity_log", "gcp": "audit_logs",
-                  "oci": "audit_logging"},
+    "flow_logs": {"aws": "flow_logs"},
     "key_management": {"aws": "kms_rotation", "azure": "keyvault_protection",
                        "gcp": "kms_rotation", "oci": "vault_rotation"},
 }
@@ -611,12 +613,6 @@ def generate_terraform(customer: str, provider: str, selections: list, output_di
     tf_meta = PROVIDER_TF[provider]
     os.makedirs(output_dir, exist_ok=True)
 
-    # Clean up previously generated .tf files from prior runs so that removed
-    # selections don't linger. Terraform loads ALL .tf files in a directory, so
-    # stale remediation files would remain active even if omitted from the new run.
-    for existing_tf in [f for f in os.listdir(output_dir) if f.endswith(".tf")]:
-        os.remove(os.path.join(output_dir, existing_tf))
-
     # Resolve each selection (accepts provider-neutral names or provider-specific keys),
     # then validate. Fail loudly on unknown IDs rather than silently skipping.
     resolved = [(s, normalize_selection(s, provider, catalog)) for s in selections]
@@ -630,6 +626,17 @@ def generate_terraform(customer: str, provider: str, selections: list, output_di
     if not valid:
         print(f"  [ERROR] No valid remediation selections for provider '{provider}'. Nothing generated.", file=sys.stderr)
         return []
+
+    # Clean up previously generated .tf files from prior runs so that removed
+    # selections don't linger. Terraform loads ALL .tf files in a directory, so
+    # stale remediation files would remain active even if omitted from the new run.
+    # Only remove files matching the generator's own naming patterns to avoid
+    # destroying hand-written Terraform in the same directory.
+    _shared_files = {"providers.tf", "variables.tf", "locals.tf", "terraform.tfvars.example"}
+    _customer_prefix = re.sub(r'[^\w\-]', '_', customer) + f"_{provider}_"
+    for existing_tf in os.listdir(output_dir):
+        if existing_tf in _shared_files or existing_tf.startswith(_customer_prefix):
+            os.remove(os.path.join(output_dir, existing_tf))
 
     # --- Shared files (written once) ---
     # Build a version-pinned required_providers block. Add azuread when an Azure
@@ -671,7 +678,9 @@ def generate_terraform(customer: str, provider: str, selections: list, output_di
             f"# Always run `terraform plan` to review changes before `terraform apply`.\n\n"
             f"{entry['body']()}\n"
         )
-        filename = f"{customer.replace(' ', '_')}_{provider}_{sel}.tf"
+        # Sanitize customer name for use in filenames (prevent path traversal)
+        safe_name = re.sub(r'[^\w\-]', '_', customer)
+        filename = f"{safe_name}_{provider}_{sel}.tf"
         with open(os.path.join(output_dir, filename), "w", encoding="utf-8") as fh:
             fh.write(content)
         generated.append(filename)
@@ -703,6 +712,9 @@ def main():
 
     print(f"Generating Terraform ({provider}) for: {', '.join(selections)}")
     generated = generate_terraform(customer, provider, selections, args.output_dir)
+    if not generated:
+        print(f"\n❌ No Terraform modules generated — check errors above.", file=sys.stderr)
+        sys.exit(1)
     print(f"\n✅ Generated {len(generated)} Terraform module(s) → {args.output_dir}")
     print("⚠️  Review + `terraform plan` before `apply`.")
 

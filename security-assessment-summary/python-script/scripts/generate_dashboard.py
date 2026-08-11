@@ -53,7 +53,9 @@ def generate_html(data: dict, output_path: str):
     html_parts.append(_roadmap_section())
     html_parts.append(_footer(scan_date, scopes, scope_term, provider_labels))
 
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    output_dir = os.path.dirname(output_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as fh:
         fh.write("\n".join(html_parts))
 
@@ -215,7 +217,8 @@ Highcharts.chart('severity-chart', {{
     {{ name: 'Critical', y: {severity['critical']}, color: '#d32f2f' }},
     {{ name: 'High', y: {severity['high']}, color: '#f57c00' }},
     {{ name: 'Medium', y: {severity['medium']}, color: '#fbc02d' }},
-    {{ name: 'Low', y: {severity['low']}, color: '#388e3c' }}
+    {{ name: 'Low', y: {severity['low']}, color: '#388e3c' }},
+    {{ name: 'Other', y: {severity.get('other', 0)}, color: '#9e9e9e' }}
   ] }}],
   credits: {{ enabled: false }}
 }});

@@ -109,7 +109,7 @@ kpis.forEach((kpi, i) => {
 const insights = [
   `Total of ${summary.total_checks.toLocaleString()} security checks performed across ${providerLabels}`,
   `${severity.critical + severity.high} Critical/High findings require immediate attention`,
-  `${Object.keys(summary.findings_by_service).length} cloud services with security findings`,
+  `${Object.keys(summary.findings_by_service).length}+ cloud services with security findings`,
 ];
 insights.forEach((text, i) => {
   slide.addText(`• ${text}`, { x: 0.7, y: 2.5 + i * 0.4, w: 8.7, h: 0.35, fontSize: 12, color: SLATE });

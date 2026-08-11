@@ -122,7 +122,7 @@ Prefer the **richest available source** per scan. Read at least one of the follo
 **E) Prowler compliance CSVs (framework coverage):**
 - Delimiter: semicolon (`;`); key columns: STATUS, CHECKID, REQUIREMENTS_ID, REQUIREMENTS_DESCRIPTION, REQUIREMENTS_ATTRIBUTES_SERVICE, REQUIREMENTS_ATTRIBUTES_SECTION, FRAMEWORK. Use for per-framework pass-rate reporting. Frameworks vary by cloud (e.g. CIS AWS/Azure/GCP/OCI benchmarks, Azure Security Benchmark, etc.).
 
-**Compute security score:** (pass_count / total_checks) * 100, reported overall and per provider/scope.
+**Compute security score:** (pass_count / (pass_count + fail_count)) * 100, reported overall and per provider/scope. Non-actionable statuses (MANUAL/INFO/MUTED) are excluded from the denominator so they don't artificially deflate the score.
 
 - **Validate**: Data contains at least findings with severity levels
 - **On failure**: Report which files failed and continue with available data
