@@ -2,7 +2,7 @@
 
 An Amazon Quick skill that analyzes **Prowler security scan outputs from any cloud — AWS, Azure, GCP, or OCI** — and generates a complete set of customer-ready deliverables:
 
-- 📊 **Interactive HTML dashboard** — KPI cards, security-score gauge, severity/service charts (Highcharts), findings tables, remediation cards, and a phased roadmap
+- 📊 **Interactive HTML dashboard** — KPI cards, an overall security-score badge, severity/service/checks charts (Chart.js), regional analysis, filterable findings tables, compliance coverage, key insights, and a phased roadmap
 - 📑 **PowerPoint deck** (11 slides, neutral branding) — executive summary, findings, remediation, roadmap
 - 📄 **Phased remediation plan** (PDF, with charts embedded)
 - 🛠️ **Terraform remediation modules** — one consistent IaC language across all clouds

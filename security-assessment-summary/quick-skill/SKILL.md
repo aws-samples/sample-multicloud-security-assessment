@@ -14,7 +14,7 @@ inputs:
     type: path
     required: false
 tools: [run_python, file_write, open_in_session_tab, file_copy, file_read, run_javascript, file_edit, folder_create, file_move, folder_list]
-depends-on: [canvas_pptx, html_design, highcharts]
+depends-on: [canvas_pptx, html_design, chartjs]
 ---
 
 ## Overview
@@ -123,7 +123,7 @@ Prefer the **richest available source** per scan. Read at least one of the follo
 - Delimiter: semicolon (`;`); key columns: STATUS, CHECKID, REQUIREMENTS_ID, REQUIREMENTS_DESCRIPTION, REQUIREMENTS_ATTRIBUTES_SERVICE, REQUIREMENTS_ATTRIBUTES_SECTION, FRAMEWORK. Use for per-framework pass-rate reporting. Frameworks vary by cloud (e.g. CIS AWS/Azure/GCP/OCI benchmarks, Azure Security Benchmark, etc.).
 - **Two denominators — do not conflate them.** One CSV row is requirement x resource x region x scope, so a plain row count is a *check* count, not the framework's size, and it multiplies when several scopes are assessed (e.g. MITRE ATT&CK: ~45 requirements but 23,000+ rows across two accounts). Report check-level pass/fail/total (a valid scope-weighted rate) **and** a requirement-level count de-duplicated by REQUIREMENTS_ID, where a requirement passes only if no scope reported FAIL for it. Label them distinctly ("Total Checks" vs "Requirements Met") — never present a summed row count as framework coverage.
 
-**Compute security score:** (pass_count / (pass_count + fail_count)) * 100, reported overall and per provider/scope. Non-actionable statuses (MANUAL/INFO/MUTED) are excluded from the denominator so they don't artificially deflate the score.
+**Compute security score:** weighted-penalty model — `100 - (weighted_penalty / max_possible_penalty) * 100`, where each failed finding contributes its severity weight (Critical 10 / High 7 / Medium 4 / Low 2 / Info 1) and `max_possible_penalty = total_findings * 10`. Report overall and per provider/scope. Non-actionable statuses (MANUAL/INFO/MUTED) do not count as failures, so they don't inflate the penalty. Higher score is better.
 
 - **Validate**: Data contains at least findings with severity levels
 - **On failure**: Report which files failed and continue with available data
@@ -138,27 +138,46 @@ Prefer the **richest available source** per scan. Read at least one of the follo
 
 ### Step 4: Generate HTML Dashboard
 - **Mode**: `agentic`
-- **Tool**: `file_write` (load html_design + highcharts skills first; use CDN Highcharts URLs)
+- **Tool**: `file_write` (load the html_design + chartjs skills first; use CDN Chart.js/Bootstrap/Font Awesome URLs)
 - **Input**: Canonical dataset from Step 3/3a + customer info
 - **Output**: `{{output_folder_path}}/reports/{Customer}_Security_Dashboard.html`
-- **Validate**: File created, contains Highcharts charts + data tables; if `anonymize=true`, contains NO real identifiers (see Step 10 gate)
+- **Validate**: File created, contains Chart.js charts + data tables; if `anonymize=true`, contains NO real identifiers (see Step 10 gate)
 
-Dashboard must include:
-1. KPI cards (Total Checks, Pass Rate %, Critical Findings, High Findings, Scopes Assessed — where "scope" = accounts/subscriptions/projects/tenancies)
-2. Security Score gauge (solid-gauge showing pass rate %)
-3. Findings by Severity chart (donut: Critical/High/Medium/Low, plus Other when non-zero)
-4. Findings by Service chart (top 10 services bar chart) — use the DETECTED provider's service names
-5. **Findings by Cloud Provider** (when >1 provider present): a breakdown chart by provider
-6. Top Failed Checks table (check_title, service, severity, count, risk description)
-7. Compliance Framework Coverage (per-framework pass rate if available; frameworks appropriate to each cloud)
-8. Remediation Priority cards (Critical → High → Medium, with provider-appropriate actions and Terraform snippets from Prowler data)
-9. Phased Remediation Roadmap (Immediate: Critical, Week 1-2: High, Month 1: Medium, Ongoing: Low)
-10. **Cloud Shared Responsibility Model** reminder — provider-appropriate wording (AWS Shared Responsibility Model; Azure shared responsibility; Google shared responsibility; OCI shared security model). If multiple providers, state it generically.
-11. Footer with data sources, scan date, and — **only if `anonymize=false`** — the scope identifiers. If `anonymize=true`, show masked labels only.
+Dashboard must be a single-page HTML titled **"CSPM Security Insights Dashboard for {Customer}"** with a fixed dark top **navbar** and a collapsible left **sidebar** navigating these anchored sections (`#overview`, `#charts`, `#regions`, `#details`, `#compliance`, `#insights`, `#roadmap`, `#methodology`):
+1. **Overview** — gradient header (dark-slate → blue) with the report title, an "across N {provider} {scope}s" subtitle, the scan date, and an **Overall Security Score** badge (green `score-high` ≥70, yellow `score-medium` ≥40, red `score-low` <40).
+2. **Global Filter** — a status dropdown (`All / Failed / Passed / Manual`, `id="statusFilter"`) that live-updates the KPI cards and a filter-info alert.
+3. **KPI cards** — Critical Findings, High Findings, Total Findings, and Scopes Assessed (provider-aware label, e.g. "AWS Accounts" / "Azure Subscriptions").
+4. **Charts** (four Chart.js canvases): `severityChart` — severity distribution (pie/donut: Critical/High/Medium/Low, plus Other when non-zero); `accountChart` — per-scope security comparison (stacked bar); `serviceChart` — service risk analysis (mixed bar + line, dual axis: risk score 0-100 and failed-findings count), using the DETECTED provider's service names; `checksChart` — top 10 failing checks by failure count (horizontal bar).
+5. **Regional Analysis** — `regionsChart` (stacked bar by region) plus a "Top Regions by Findings" table (Region / Total / Failed / Critical / High / Risk).
+6. **Detailed Analysis** — an **Account/Scope Security Details** table (filter by name/number, paginated: Account, Number, Total, Failed, Pass Rate, Critical, High, Risk Score) and a **Service Vulnerability Analysis** table (filter by service, paginated: Service, Total, Failed, Failure Rate, Critical, High, Risk Score).
+7. **Compliance Framework Coverage** — one card per framework (appropriate to each cloud) with a pass-rate progress bar (green ≥80%, orange ≥50%, red otherwise).
+8. **Key Insights** — dynamically generated Bootstrap alerts (critical-findings callout, weak-scope callout, and an overall posture alert keyed to the score).
+9. **Improvement Roadmap** — `roadmapChart` (mixed bar + line: issues vs. effort) plus three phase cards: Immediate (1-2 weeks), Short Term (1-2 months), Long Term (3-6 months).
+10. **Score Methodology** — explains the Overall Security Score and Risk Score formulas, the severity weights (Critical 10 / High 7 / Medium 4 / Low 2 / Info 1), and the risk bands (High ≥70, Medium 40-69, Low 0-39).
+11. Footer/header identifiers respect anonymization — **only if `anonymize=false`** show real scope identifiers; if `anonymize=true`, show masked labels only (see Step 10 gate).
 
-**Branding: NEUTRAL — no cloud logo.** Do NOT embed any cloud-provider logo. Use a clean, neutral header: a dark slate band (e.g. `#1F2937`) with the report title and customer name, and a subtle accent color. This keeps deliverables safe for single-cloud or mixed multi-cloud customer distribution.
+**Branding: NEUTRAL — no cloud logo.** Do NOT embed any cloud-provider logo. The header is a dark-slate→blue gradient band with the report title and customer name. This keeps deliverables safe for single-cloud or mixed multi-cloud customer distribution.
 
-**CRITICAL**: Use CDN Highcharts URLs (`https://cdn.jsdelivr.net/npm/highcharts@12.1.2/`) — pin the version so the dashboard renders consistently and offline-of-your-app.
+**CRITICAL**: Use pinned CDN versions so the dashboard renders consistently and offline-of-your-app:
+- Chart.js: `https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js`
+- Bootstrap: `https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css` (+ bundle JS)
+- Font Awesome: `https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css`
+
+**SECURITY — pin + Subresource Integrity (SRI).** Every CDN `<script>`/`<link>` MUST include `integrity="sha384-..."` and `crossorigin="anonymous"` so a compromised CDN cannot inject code into a customer-facing report. Compute each hash from the exact pinned file: `curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A`. For the versions above:
+- Chart.js 3.9.1: `sha384-9MhbyIRcBVQiiC7FSd7T38oJNj2Zh+EfxS7/vjhBi4OOT78NlHSnzM31EZRWR1LZ`
+- Bootstrap 5.1.3 CSS: `sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3`
+- Bootstrap 5.1.3 bundle JS: `sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p`
+- Font Awesome 6.0.0 CSS: `sha384-3B6NwesSXE7YJlcLI9RpRqGf2p/EgVH8BgoKTaUrmKNDkHPStTQ3EyoYjCGXaOTS`
+
+**For sensitive or anonymized deliverables, prefer INLINING the assets** (embed the CSS/JS directly, or vendor them locally) so the report makes **no external network calls** at all. This closes the CDN supply-chain risk entirely and prevents third-party scripts from running in a page that may contain (even masked) customer data. If you inline, SRI is unnecessary — nothing is fetched remotely. Especially recommended when `anonymize=true`.
+
+**Pagination must NOT scroll the page.** The Account/Scope and Service tables are paginated (5 rows/page) with Previous / numbered / Next links. Each pager link is an `<a href="#">` with an `onclick` handler that changes the page — the handler MUST end with `; return false;` (or call `event.preventDefault()`) so clicking a page control does NOT jump/scroll the page to the top. Example: `onclick="changeServicePage(2); return false;"`. Apply this to every pagination link in both tables.
+
+**SECURITY — escape ALL finding-derived data (prevents XSS).** Scan findings contain attacker-influenceable free text (check titles, service names, resource IDs/ARNs, account names, region names, risk/remediation text). This data MUST NEVER be written into the page unescaped, or a malicious value like `<img src=x onerror=alert(1)>` will execute in the analyst's browser. Follow BOTH rules:
+- **HTML context** — when rendering any finding value into markup (table cells, `data-*` attributes, headings, the customer name in `<title>`/`<h1>`), HTML-escape it first (`&`→`&amp;`, `<`→`&lt;`, `>`→`&gt;`, `"`→`&quot;`, `'`→`&#39;`). Escape exactly once — do not double-escape a value that was already escaped upstream.
+- **`<script>` / JSON context** — when embedding data into an inline `<script>` (e.g. Chart.js configs, chart `labels`, tooltip arrays like `fullTitles`/`services`/`checkIds`), serialize with JSON and additionally escape `<`, `>`, `&` as `\u003c`, `\u003e`, `\u0026` so a value containing `</script>` cannot break out of the script block.
+- **Do NOT build HTML from finding data with `innerHTML`/string concatenation.** Prefer `textContent`, or build escaped strings server-side. `innerHTML` is only acceptable for fixed literal markup, never for values derived from findings.
+- If `anonymize=true`, escaping is applied on top of the masked labels (masking does not remove HTML metacharacters).
 
 ### Step 5: Generate PPTX Deck
 - **Mode**: `agentic`
@@ -274,7 +293,7 @@ Then open the HTML dashboard + PPTX deck and present a summary with links.
 ```
 {{output_folder_path}}/                                   # user's choice, or default <cloud>/assessment-summary-<provider>/
 ├── reports/
-│   ├── {Customer}_Security_Dashboard.html               # Interactive Highcharts dashboard (neutral branding)
+│   ├── {Customer}_Security_Dashboard.html               # Interactive Chart.js dashboard (neutral branding)
 │   └── {Customer}_Security_Assessment_Deck.pptx         # Neutral executive deck (11 slides)
 ├── {Customer}_README.md                                 # Usage guide
 ├── {Customer}_Security_Remediation_Plan.pdf             # Phased plan (neutral branding, charts embedded)
@@ -364,14 +383,16 @@ All generated **Terraform** modules MUST adhere to these standards (apply the eq
 - Use compliance/ subfolder CSVs for framework-specific coverage analysis (frameworks vary by cloud)
 - Leverage `REMEDIATION_CODE_TERRAFORM` from Prowler as the Terraform starting point
 - Group findings by: severity first, then service, then check_id
-- Calculate security score as: (pass_count / (pass_count + fail_count)) * 100 — overall and per provider/scope, with MANUAL/INFO/MUTED excluded from the denominator
+- Calculate security score as the weighted-penalty model: `100 - (weighted_penalty / max_possible_penalty) * 100` (severity weights Critical 10 / High 7 / Medium 4 / Low 2 / Info 1) — overall and per provider/scope; MANUAL/INFO/MUTED are non-actionable
 - Always present Critical findings first in all deliverables
 - Make anonymization a REQUIRED up-front choice; apply the mapping to the canonical dataset (Step 3a) and VERIFY across every artifact (Step 10 gate)
 - Use NEUTRAL branding (no cloud logo) on the dashboard, deck, and PDF
 - Embed the chart PNGs into the PDF (not text-only)
 - Include the review-before-deploy disclaimer for all generated IaC
 - Prefix ALL output files with customer name
-- Pin the Highcharts CDN version
+- Pin the Chart.js / Bootstrap / Font Awesome CDN versions (Chart.js 3.9.1, Bootstrap 5.1.3, Font Awesome 6.0.0)
+- Make table pagination links end their onclick with `; return false;` (or `event.preventDefault()`) so paging the Account/Service tables never scrolls the page to the top
+- HTML-escape ALL finding-derived data (check titles, services, resource IDs, account/region names, customer name) before writing it into markup; JSON-encode + `\u003c`/`\u003e`/`\u0026`-escape any data embedded in inline `<script>` (chart configs, tooltip arrays) so `</script>` can't break out — escape exactly once, never double-escape
 - Use Paragraph objects in reportlab Table cells for text wrapping
 - IaC is Terraform for all clouds — use the correct provider block
 
@@ -384,6 +405,7 @@ All generated **Terraform** modules MUST adhere to these standards (apply the eq
 - Don't show real account/subscription/project/tenancy identifiers when `anonymize=true`
 - Don't publish real-looking identifiers in examples — use obvious placeholders (e.g. account `123456789012`)
 - Don't produce a text-only PDF — embed the charts
+- Don't write finding-derived data into HTML or inline `<script>` unescaped — it's an XSS vector; HTML-escape for markup and JSON+unicode-escape for scripts
 - Don't assume comma-delimited CSVs — Prowler uses semicolons
 - Don't skip the PPTX deck — it is mandatory
 - Don't use `LAYOUT_WIDE` (13.33"×7.5") for pptxgenjs — ALWAYS use `pres.layout = 'LAYOUT_16x9'` (10"×5.625")

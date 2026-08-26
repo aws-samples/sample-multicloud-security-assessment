@@ -1,0 +1,2639 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSPM Security Insights Dashboard for Acme Corporation</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .dashboard-header {
+            background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+            color: white;
+            padding: 2rem;
+            border-radius: 10px;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .dashboard-header h1 {
+            color: white !important;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+            margin-bottom: 0.5rem;
+        }
+
+        .dashboard-header .lead {
+            color: rgba(255, 255, 255, 0.9) !important;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+            margin-bottom: 1rem;
+        }
+
+        .dashboard-header .generation-time {
+            color: rgba(255, 255, 255, 0.8) !important;
+            font-size: 0.9rem;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+        }
+
+        .summary-card {
+            border: none;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s;
+        }
+
+        .summary-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .security-score {
+            font-size: 1.2rem;
+        }
+
+        .score-label {
+            color: white !important;
+            font-weight: 500;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+            margin-right: 0.5rem;
+        }
+
+        .score-value {
+            font-weight: bold;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .score-high {
+            background-color: #d4edda;
+            color: #155724;
+            border: 2px solid #c3e6cb;
+        }
+
+        .score-medium {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 2px solid #ffeaa7;
+        }
+
+        .score-low {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 2px solid #f5c6cb;
+        }
+
+        .risk-score {
+            font-weight: bold;
+            padding: 0.25rem 0.5rem;
+            border-radius: 15px;
+        }
+
+        .risk-high {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .risk-medium {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+
+        .risk-low {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .card {
+            border: none;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1rem;
+        }
+
+        .card-header {
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            font-weight: 600;
+        }
+
+        .table th {
+            border-top: none;
+            font-weight: 600;
+            background-color: #f8f9fa;
+        }
+
+        /* Navigation Styles */
+        .main-content {
+            margin-top: 70px;
+            /* Account for fixed navbar */
+            transition: margin-left 0.3s ease;
+        }
+
+        .sidebar {
+            position: fixed;
+            top: 56px;
+            /* Below navbar */
+            left: -300px;
+            width: 300px;
+            height: calc(100vh - 56px);
+            background: #fff;
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+            transition: left 0.3s ease;
+            z-index: 1040;
+            overflow-y: auto;
+        }
+
+        .sidebar.show {
+            left: 0;
+        }
+
+        .sidebar-header {
+            padding: 1rem;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            justify-content: between;
+            align-items: center;
+        }
+
+        .sidebar-content {
+            padding: 1rem;
+        }
+
+        .nav-section {
+            margin-bottom: 2rem;
+        }
+
+        .nav-section h6 {
+            color: #6c757d;
+            font-size: 0.875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.75rem;
+        }
+
+        .sidebar .nav-link {
+            color: #495057;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.375rem;
+            transition: all 0.2s ease;
+            font-size: 0.875rem;
+        }
+
+        .sidebar .nav-link:hover {
+            background-color: #f8f9fa;
+            color: #007bff;
+            text-decoration: none;
+        }
+
+        .sidebar .nav-link i {
+            width: 20px;
+            margin-right: 0.5rem;
+        }
+
+        .sidebar-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1030;
+            display: none;
+        }
+
+        .sidebar-overlay.show {
+            display: block;
+        }
+
+        /* Smooth scrolling */
+        html {
+            scroll-behavior: smooth;
+        }
+
+        /* Section spacing for navigation */
+        .row[id] {
+            scroll-margin-top: 80px;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .main-content {
+                margin-top: 60px;
+            }
+
+            .sidebar {
+                top: 60px;
+                height: calc(100vh - 60px);
+            }
+        }
+
+        /* Print Styles */
+        @media print {
+
+            /* Hide navigation elements */
+            .navbar,
+            .sidebar,
+            .sidebar-overlay,
+            .btn {
+                display: none !important;
+            }
+
+            /* Reset main content margins */
+            .main-content {
+                margin-top: 0 !important;
+                margin-left: 0 !important;
+            }
+
+            /* Optimize layout for print */
+            body {
+                background: white !important;
+                color: black !important;
+                font-size: 12pt;
+                line-height: 1.4;
+            }
+
+            /* Ensure dashboard header prints nicely */
+            .dashboard-header {
+                background: #2c3e50 !important;
+                color: white !important;
+                padding: 1rem !important;
+                margin-bottom: 1rem !important;
+                page-break-inside: avoid;
+            }
+
+            /* Optimize cards for print */
+            .card {
+                border: 1px solid #ddd !important;
+                box-shadow: none !important;
+                margin-bottom: 1rem !important;
+                page-break-inside: avoid;
+            }
+
+            .card-header {
+                background: #f8f9fa !important;
+                border-bottom: 1px solid #ddd !important;
+                font-weight: bold;
+            }
+
+            /* Optimize tables for print */
+            .table {
+                font-size: 10pt;
+            }
+
+            .table th,
+            .table td {
+                padding: 0.25rem !important;
+                border: 1px solid #ddd !important;
+            }
+
+            /* Hide interactive elements */
+            .form-control,
+            .form-select,
+            .alert {
+                display: none !important;
+            }
+
+            /* Optimize charts for print */
+            canvas {
+                max-width: 100% !important;
+                height: auto !important;
+            }
+
+            /* Page break controls */
+            .row[id] {
+                page-break-before: auto;
+                page-break-after: auto;
+                page-break-inside: avoid;
+            }
+
+            /* Ensure badges and scores are visible */
+            .badge,
+            .risk-score,
+            .score-value {
+                border: 1px solid #333 !important;
+                background: white !important;
+                color: black !important;
+            }
+
+            /* Hide filter sections */
+            .card:has(.form-control),
+            .card:has(.form-select) {
+                display: none !important;
+            }
+
+            /* Optimize spacing */
+            .container-fluid {
+                padding: 0 !important;
+            }
+
+            .row {
+                margin: 0 !important;
+            }
+
+            .col-md-6,
+            .col-md-4,
+            .col-md-3,
+            .col-12 {
+                padding: 0.25rem !important;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container-fluid">
+            <button class="btn btn-outline-light btn-sm me-3" onclick="toggleSidebar()">
+                <i class="fas fa-bars"></i> Menu
+            </button>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="#overview">📊 Overview</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#charts">📈 Charts</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#regions">🌍 Regions</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#details">📋 Details</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#compliance">✅ Compliance</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#insights">💡 Insights</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#roadmap">🛣️ Roadmap</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#methodology">🔢 Methodology</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Collapsible Sidebar -->
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <h5>Navigation</h5>
+            <button class="btn btn-sm btn-outline-secondary" onclick="toggleSidebar()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="sidebar-content">
+            <div class="nav-section">
+                <h6>📊 Dashboard Sections</h6>
+                <ul class="nav flex-column">
+                    <li class="nav-item">
+                        <a class="nav-link" href="#overview" onclick="scrollToSection('overview')">
+                            <i class="fas fa-tachometer-alt"></i> Overview & Summary
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#charts" onclick="scrollToSection('charts')">
+                            <i class="fas fa-chart-pie"></i> Security Charts
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#regions" onclick="scrollToSection('regions')">
+                            <i class="fas fa-globe"></i> Regional Analysis
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#details" onclick="scrollToSection('details')">
+                            <i class="fas fa-table"></i> Detailed Analysis
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#compliance" onclick="scrollToSection('compliance')">
+                            <i class="fas fa-check-circle"></i> Compliance Status
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#insights" onclick="scrollToSection('insights')">
+                            <i class="fas fa-lightbulb"></i> Key Insights
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#roadmap" onclick="scrollToSection('roadmap')">
+                            <i class="fas fa-road"></i> Improvement Roadmap
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#methodology" onclick="scrollToSection('methodology')">
+                            <i class="fas fa-calculator"></i> Score Methodology
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+
+        </div>
+    </div>
+
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+
+
+    <div class="main-content">
+        <div class="container-fluid">
+
+            <div class="row mb-4" id="overview">
+                <div class="col-12">
+                    <div class="dashboard-header">
+                        <h1 class="display-4">CSPM Security Insights Dashboard for Acme Corporation</h1>
+                        <p class="lead">Security Insights from the Prowler Scans for Acme Corporation across 11 AWS
+                            accounts</p>
+                        <div class="d-flex justify-content-between align-items-center flex-wrap">
+                            <span class="generation-time">Generated: 2025-08-25 23:44:34</span>
+                            <div class="security-score d-flex align-items-center">
+                                <span class="score-label">Overall Security Score:</span>
+                                <span class="score-value score-high">84.1%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>🔍 Global Filter</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row align-items-center">
+                                <div class="col-md-4">
+                                    <label for="statusFilter" class="form-label">Filter by Finding Status:</label>
+                                    <select id="statusFilter" class="form-select" onchange="applyStatusFilter()">
+                                        <option value="all">All Findings</option>
+                                        <option value="Failed">Failed Only</option>
+                                        <option value="Passed">Passed Only</option>
+                                        <option value="Manual">Manual Only</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-8">
+                                    <div class="alert alert-info mb-0" id="filterInfo">
+                                        <small><strong>Current View:</strong> Showing all findings across all
+                                            statuses</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card summary-card">
+                        <div class="card-body text-center">
+                            <h3 class="card-title text-danger" id="criticalCount">19</h3>
+                            <p class="card-text">Critical Findings</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card summary-card">
+                        <div class="card-body text-center">
+                            <h3 class="card-title text-warning" id="highCount">226</h3>
+                            <p class="card-text">High Findings</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card summary-card">
+                        <div class="card-body text-center">
+                            <h3 class="card-title text-info" id="totalCount">7983</h3>
+                            <p class="card-text" id="totalLabel">Total Findings</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card summary-card">
+                        <div class="card-body text-center">
+                            <h3 class="card-title text-success" id="accountCount">11</h3>
+                            <p class="card-text">AWS Accounts</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+            <div class="row mb-4" id="charts">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>Severity Distribution</h5>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="severityChart" height="300"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>Account Security Comparison</h5>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="accountChart" height="300"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>Service Risk Analysis</h5>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="serviceChart" height="300"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>Top Failing Checks (by Failure Count)</h5>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="checksChart" height="400"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+            <div class="row mb-4" id="regions">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>🌍 Regional Distribution of Findings</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <canvas id="regionsChart" height="300"></canvas>
+                                </div>
+                                <div class="col-md-4">
+                                    <h6>Top Regions by Findings</h6>
+                                    <div class="table-responsive">
+
+                                        <table class="table table-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th><small>Region</small></th>
+                                                    <th class="text-center"><small>Total</small></th>
+                                                    <th class="text-center"><small>Failed</small></th>
+                                                    <th class="text-center"><small>Critical</small></th>
+                                                    <th class="text-center"><small>High</small></th>
+                                                    <th class="text-center"><small>Risk</small></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+
+                                                <tr>
+                                                    <td><small><strong>us-east-2</strong></small></td>
+                                                    <td class="text-center"><small>4072</small></td>
+                                                    <td class="text-center"><small>1578</small></td>
+                                                    <td class="text-center"><small><span
+                                                                class="badge bg-danger">19</span></small></td>
+                                                    <td class="text-center"><small><span
+                                                                class="badge bg-warning">153</span></small></td>
+                                                    <td class="text-center"><small><span
+                                                                class="risk-score risk-low">39.5</span></small></td>
+                                                </tr>
+
+                                                <tr>
+                                                    <td><small><strong>us-east-1</strong></small></td>
+                                                    <td class="text-center"><small>1530</small></td>
+                                                    <td class="text-center"><small>537</small></td>
+                                                    <td class="text-center"><small><span
+                                                                class="badge bg-danger">0</span></small></td>
+                                                    <td class="text-center"><small><span
+                                                                class="badge bg-warning">73</span></small></td>
+                                                    <td class="text-center"><small><span
+                                                                class="risk-score risk-low">38.2</span></small></td>
+                                                </tr>
+
+                                                <tr>
+                                                    <td><small><strong>us-west-2</strong></small></td>
+                                                    <td class="text-center"><small>169</small></td>
+                                                    <td class="text-center"><small>81</small></td>
+                                                    <td class="text-center"><small><span
+                                                                class="badge bg-danger">0</span></small></td>
+                                                    <td class="text-center"><small><span
+                                                                class="badge bg-warning">0</span></small></td>
+                                                    <td class="text-center"><small><span
+                                                                class="risk-score risk-low">36.5</span></small></td>
+                                                </tr>
+
+                                                <tr>
+                                                    <td><small><strong>ap-northeast-1</strong></small></td>
+                                                    <td class="text-center"><small>158</small></td>
+                                                    <td class="text-center"><small>81</small></td>
+                                                    <td class="text-center"><small><span
+                                                                class="badge bg-danger">0</span></small></td>
+                                                    <td class="text-center"><small><span
+                                                                class="badge bg-warning">0</span></small></td>
+                                                    <td class="text-center"><small><span
+                                                                class="risk-score risk-low">36.5</span></small></td>
+                                                </tr>
+
+                                                <tr>
+                                                    <td><small><strong>ap-northeast-2</strong></small></td>
+                                                    <td class="text-center"><small>158</small></td>
+                                                    <td class="text-center"><small>81</small></td>
+                                                    <td class="text-center"><small><span
+                                                                class="badge bg-danger">0</span></small></td>
+                                                    <td class="text-center"><small><span
+                                                                class="badge bg-warning">0</span></small></td>
+                                                    <td class="text-center"><small><span
+                                                                class="risk-score risk-low">36.5</span></small></td>
+                                                </tr>
+
+                                            </tbody>
+                                        </table>
+
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+            <div class="row mb-4" id="details">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>Account Security Details</h5>
+                        </div>
+                        <div class="card-body">
+
+                            <div class="row mb-3">
+                                <div class="col-md-4">
+                                    <label for="accountNameFilter" class="form-label">Filter by Account Name:</label>
+                                    <input type="text" id="accountNameFilter" class="form-control"
+                                        placeholder="Enter account name..." onkeyup="filterAccountTable()">
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="accountNumberFilter" class="form-label">Filter by Account
+                                        Number:</label>
+                                    <input type="text" id="accountNumberFilter" class="form-control"
+                                        placeholder="Enter account number..." onkeyup="filterAccountTable()">
+                                </div>
+                                <div class="col-md-4 d-flex align-items-end">
+                                    <button type="button" class="btn btn-outline-secondary"
+                                        onclick="clearAccountFilters()">
+                                        🗑️ Clear Filters
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="table-responsive">
+
+                                <table class="table table-striped" id="accountTable">
+                                    <thead>
+                                        <tr>
+                                            <th>Account</th>
+                                            <th>Account Number</th>
+                                            <th>Total Findings</th>
+                                            <th>Failed</th>
+                                            <th>Pass Rate</th>
+                                            <th>Critical</th>
+                                            <th>High</th>
+                                            <th>Risk Score</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="accountTableBody">
+
+                                        <tr class="account-row" data-account-name="aws-production-001"
+                                            data-account-id="123456789012" data-risk-score="39.4" data-pass-rate="55.7">
+                                            <td>AWS-Production-001</td>
+                                            <td><code>123456789012</code></td>
+                                            <td>679</td>
+                                            <td>301</td>
+                                            <td>55.7%</td>
+                                            <td><span class="badge bg-danger">2</span></td>
+                                            <td><span class="badge bg-warning">15</span></td>
+                                            <td><span class="risk-score risk-low">39.4</span></td>
+                                        </tr>
+
+                                        <tr class="account-row" data-account-name="aws-development-002"
+                                            data-account-id="234567890123" data-risk-score="39.4" data-pass-rate="60.0">
+                                            <td>AWS-Development-002</td>
+                                            <td><code>234567890123</code></td>
+                                            <td>805</td>
+                                            <td>322</td>
+                                            <td>60.0%</td>
+                                            <td><span class="badge bg-danger">2</span></td>
+                                            <td><span class="badge bg-warning">26</span></td>
+                                            <td><span class="risk-score risk-low">39.4</span></td>
+                                        </tr>
+
+                                        <tr class="account-row" data-account-name="aws-staging-003"
+                                            data-account-id="345678901234" data-risk-score="39.3" data-pass-rate="54.0">
+                                            <td>AWS-Staging-003</td>
+                                            <td><code>345678901234</code></td>
+                                            <td>526</td>
+                                            <td>242</td>
+                                            <td>54.0%</td>
+                                            <td><span class="badge bg-danger">2</span></td>
+                                            <td><span class="badge bg-warning">16</span></td>
+                                            <td><span class="risk-score risk-low">39.3</span></td>
+                                        </tr>
+
+                                        <tr class="account-row" data-account-name="aws-testing-004"
+                                            data-account-id="456789012345" data-risk-score="38.9" data-pass-rate="52.2">
+                                            <td>AWS-Testing-004</td>
+                                            <td><code>456789012345</code></td>
+                                            <td>372</td>
+                                            <td>178</td>
+                                            <td>52.2%</td>
+                                            <td><span class="badge bg-danger">3</span></td>
+                                            <td><span class="badge bg-warning">6</span></td>
+                                            <td><span class="risk-score risk-low">38.9</span></td>
+                                        </tr>
+
+                                        <tr class="account-row" data-account-name="aws-logging-005"
+                                            data-account-id="567890123456" data-risk-score="38.7" data-pass-rate="56.0">
+                                            <td>AWS-Logging-005</td>
+                                            <td><code>567890123456</code></td>
+                                            <td>586</td>
+                                            <td>258</td>
+                                            <td>56.0%</td>
+                                            <td><span class="badge bg-danger">3</span></td>
+                                            <td><span class="badge bg-warning">13</span></td>
+                                            <td><span class="risk-score risk-low">38.7</span></td>
+                                        </tr>
+
+                                        <tr class="account-row" data-account-name="aws-analytics-006"
+                                            data-account-id="678901234567" data-risk-score="38.3" data-pass-rate="63.9">
+                                            <td>AWS-Analytics-006</td>
+                                            <td><code>678901234567</code></td>
+                                            <td>2205</td>
+                                            <td>796</td>
+                                            <td>63.9%</td>
+                                            <td><span class="badge bg-danger">2</span></td>
+                                            <td><span class="badge bg-warning">115</span></td>
+                                            <td><span class="risk-score risk-low">38.3</span></td>
+                                        </tr>
+
+                                        <tr class="account-row" data-account-name="aws-communications-007"
+                                            data-account-id="789012345678" data-risk-score="38.0" data-pass-rate="52.6">
+                                            <td>AWS-Communications-007</td>
+                                            <td><code>789012345678</code></td>
+                                            <td>333</td>
+                                            <td>158</td>
+                                            <td>52.6%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">5</span></td>
+                                            <td><span class="risk-score risk-low">38.0</span></td>
+                                        </tr>
+
+                                        <tr class="account-row" data-account-name="aws-integration-008"
+                                            data-account-id="890123456789" data-risk-score="38.0" data-pass-rate="56.8">
+                                            <td>AWS-Integration-008</td>
+                                            <td><code>890123456789</code></td>
+                                            <td>500</td>
+                                            <td>216</td>
+                                            <td>56.8%</td>
+                                            <td><span class="badge bg-danger">2</span></td>
+                                            <td><span class="badge bg-warning">7</span></td>
+                                            <td><span class="risk-score risk-low">38.0</span></td>
+                                        </tr>
+
+                                        <tr class="account-row" data-account-name="aws-security-009"
+                                            data-account-id="901234567890" data-risk-score="37.9" data-pass-rate="57.4">
+                                            <td>AWS-Security-009</td>
+                                            <td><code>901234567890</code></td>
+                                            <td>430</td>
+                                            <td>183</td>
+                                            <td>57.4%</td>
+                                            <td><span class="badge bg-danger">1</span></td>
+                                            <td><span class="badge bg-warning">5</span></td>
+                                            <td><span class="risk-score risk-low">37.9</span></td>
+                                        </tr>
+
+                                        <tr class="account-row" data-account-name="aws-communications-dev-010"
+                                            data-account-id="012345678901" data-risk-score="37.2" data-pass-rate="54.4">
+                                            <td>AWS-Communications-Dev-010</td>
+                                            <td><code>012345678901</code></td>
+                                            <td>434</td>
+                                            <td>198</td>
+                                            <td>54.4%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">6</span></td>
+                                            <td><span class="risk-score risk-low">37.2</span></td>
+                                        </tr>
+
+                                        <tr class="account-row" data-account-name="aws-integration-dev-011"
+                                            data-account-id="109876543210" data-risk-score="36.3" data-pass-rate="57.1">
+                                            <td>AWS-Integration-Dev-011</td>
+                                            <td><code>109876543210</code></td>
+                                            <td>1113</td>
+                                            <td>478</td>
+                                            <td>57.1%</td>
+                                            <td><span class="badge bg-danger">2</span></td>
+                                            <td><span class="badge bg-warning">12</span></td>
+                                            <td><span class="risk-score risk-low">36.3</span></td>
+                                        </tr>
+
+                                    </tbody>
+                                </table>
+
+                            </div>
+
+                            <div class="row mt-3">
+                                <div class="col-md-6">
+                                    <div id="accountTableInfo" class="text-muted">
+                                        <!-- Table info will be populated by JavaScript -->
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <nav aria-label="Account table pagination">
+                                        <ul class="pagination pagination-sm justify-content-end" id="accountPagination">
+                                            <!-- Pagination will be populated by JavaScript -->
+                                        </ul>
+                                    </nav>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>Service Vulnerability Analysis</h5>
+                        </div>
+                        <div class="card-body">
+
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="serviceNameFilter" class="form-label">Filter by Service Name:</label>
+                                    <input type="text" id="serviceNameFilter" class="form-control"
+                                        placeholder="Enter service name..." onkeyup="filterServiceTable()">
+                                </div>
+                                <div class="col-md-6 d-flex align-items-end">
+                                    <button type="button" class="btn btn-outline-secondary me-2"
+                                        onclick="clearServiceFilters()">
+                                        🗑️ Clear Filters
+                                    </button>
+                                    <div class="text-muted small">
+                                        <i>Sorted by Critical Failures (highest first)</i>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="table-responsive">
+
+                                <table class="table table-striped" id="serviceTable">
+                                    <thead>
+                                        <tr>
+                                            <th>Service</th>
+                                            <th>Total Findings</th>
+                                            <th>Failed</th>
+                                            <th>Failure Rate</th>
+                                            <th>Critical ↓</th>
+                                            <th>High</th>
+                                            <th>Risk Score</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="serviceTableBody">
+
+                                        <tr class="service-row" data-service-name="iam" data-critical-failures="14"
+                                            data-high-failures="129" data-risk-score="51.9" data-failure-rate="23.7">
+                                            <td>iam</td>
+                                            <td>1489</td>
+                                            <td>353</td>
+                                            <td>23.7%</td>
+                                            <td><span class="badge bg-danger">14</span></td>
+                                            <td><span class="badge bg-warning">129</span></td>
+                                            <td><span class="risk-score risk-medium">51.9</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="awslambda" data-critical-failures="3"
+                                            data-high-failures="0" data-risk-score="48.0" data-failure-rate="33.3">
+                                            <td>awslambda</td>
+                                            <td>30</td>
+                                            <td>10</td>
+                                            <td>33.3%</td>
+                                            <td><span class="badge bg-danger">3</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-medium">48.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="ec2" data-critical-failures="1"
+                                            data-high-failures="14" data-risk-score="40.2" data-failure-rate="17.6">
+                                            <td>ec2</td>
+                                            <td>1038</td>
+                                            <td>183</td>
+                                            <td>17.6%</td>
+                                            <td><span class="badge bg-danger">1</span></td>
+                                            <td><span class="badge bg-warning">14</span></td>
+                                            <td><span class="risk-score risk-medium">40.2</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="s3" data-critical-failures="1"
+                                            data-high-failures="10" data-risk-score="33.9" data-failure-rate="48.8">
+                                            <td>s3</td>
+                                            <td>1451</td>
+                                            <td>708</td>
+                                            <td>48.8%</td>
+                                            <td><span class="badge bg-danger">1</span></td>
+                                            <td><span class="badge bg-warning">10</span></td>
+                                            <td><span class="risk-score risk-low">33.9</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="ecs" data-critical-failures="0"
+                                            data-high-failures="67" data-risk-score="45.2" data-failure-rate="28.5">
+                                            <td>ecs</td>
+                                            <td>467</td>
+                                            <td>133</td>
+                                            <td>28.5%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">67</span></td>
+                                            <td><span class="risk-score risk-medium">45.2</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="sns" data-critical-failures="0"
+                                            data-high-failures="2" data-risk-score="70.0" data-failure-rate="50.0">
+                                            <td>sns</td>
+                                            <td>4</td>
+                                            <td>2</td>
+                                            <td>50.0%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">2</span></td>
+                                            <td><span class="risk-score risk-high">70.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="eks" data-critical-failures="0"
+                                            data-high-failures="1" data-risk-score="55.0" data-failure-rate="33.3">
+                                            <td>eks</td>
+                                            <td>6</td>
+                                            <td>2</td>
+                                            <td>33.3%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">1</span></td>
+                                            <td><span class="risk-score risk-medium">55.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="guardduty" data-critical-failures="0"
+                                            data-high-failures="1" data-risk-score="40.2" data-failure-rate="96.9">
+                                            <td>guardduty</td>
+                                            <td>195</td>
+                                            <td>189</td>
+                                            <td>96.9%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">1</span></td>
+                                            <td><span class="risk-score risk-medium">40.2</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="cloudfront"
+                                            data-critical-failures="0" data-high-failures="1" data-risk-score="34.4"
+                                            data-failure-rate="41.0">
+                                            <td>cloudfront</td>
+                                            <td>39</td>
+                                            <td>16</td>
+                                            <td>41.0%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">1</span></td>
+                                            <td><span class="risk-score risk-low">34.4</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="rds" data-critical-failures="0"
+                                            data-high-failures="1" data-risk-score="27.0" data-failure-rate="86.2">
+                                            <td>rds</td>
+                                            <td>94</td>
+                                            <td>81</td>
+                                            <td>86.2%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">1</span></td>
+                                            <td><span class="risk-score risk-low">27.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="account" data-critical-failures="0"
+                                            data-high-failures="0" data-risk-score="40.0" data-failure-rate="25.0">
+                                            <td>account</td>
+                                            <td>44</td>
+                                            <td>11</td>
+                                            <td>25.0%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-medium">40.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="bedrock" data-critical-failures="0"
+                                            data-high-failures="0" data-risk-score="40.0" data-failure-rate="100.0">
+                                            <td>bedrock</td>
+                                            <td>187</td>
+                                            <td>187</td>
+                                            <td>100.0%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-medium">40.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="cloudformation"
+                                            data-critical-failures="0" data-high-failures="0" data-risk-score="40.0"
+                                            data-failure-rate="50.0">
+                                            <td>cloudformation</td>
+                                            <td>44</td>
+                                            <td>22</td>
+                                            <td>50.0%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-medium">40.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="cloudwatch"
+                                            data-critical-failures="0" data-high-failures="0" data-risk-score="40.0"
+                                            data-failure-rate="54.3">
+                                            <td>cloudwatch</td>
+                                            <td>418</td>
+                                            <td>227</td>
+                                            <td>54.3%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-medium">40.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="config" data-critical-failures="0"
+                                            data-high-failures="0" data-risk-score="40.0" data-failure-rate="100.0">
+                                            <td>config</td>
+                                            <td>187</td>
+                                            <td>187</td>
+                                            <td>100.0%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-medium">40.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="drs" data-critical-failures="0"
+                                            data-high-failures="0" data-risk-score="40.0" data-failure-rate="100.0">
+                                            <td>drs</td>
+                                            <td>187</td>
+                                            <td>187</td>
+                                            <td>100.0%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-medium">40.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="inspector2"
+                                            data-critical-failures="0" data-high-failures="0" data-risk-score="40.0"
+                                            data-failure-rate="100.0">
+                                            <td>inspector2</td>
+                                            <td>187</td>
+                                            <td>187</td>
+                                            <td>100.0%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-medium">40.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="secretsmanager"
+                                            data-critical-failures="0" data-high-failures="0" data-risk-score="40.0"
+                                            data-failure-rate="81.5">
+                                            <td>secretsmanager</td>
+                                            <td>54</td>
+                                            <td>44</td>
+                                            <td>81.5%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-medium">40.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="securityhub"
+                                            data-critical-failures="0" data-high-failures="0" data-risk-score="40.0"
+                                            data-failure-rate="99.5">
+                                            <td>securityhub</td>
+                                            <td>187</td>
+                                            <td>186</td>
+                                            <td>99.5%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-medium">40.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="vpc" data-critical-failures="0"
+                                            data-high-failures="0" data-risk-score="40.0" data-failure-rate="51.5">
+                                            <td>vpc</td>
+                                            <td>97</td>
+                                            <td>50</td>
+                                            <td>51.5%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-medium">40.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="codebuild" data-critical-failures="0"
+                                            data-high-failures="0" data-risk-score="40.0" data-failure-rate="12.5">
+                                            <td>codebuild</td>
+                                            <td>24</td>
+                                            <td>3</td>
+                                            <td>12.5%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-medium">40.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="efs" data-critical-failures="0"
+                                            data-high-failures="0" data-risk-score="40.0" data-failure-rate="50.0">
+                                            <td>efs</td>
+                                            <td>12</td>
+                                            <td>6</td>
+                                            <td>50.0%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-medium">40.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="elbv2" data-critical-failures="0"
+                                            data-high-failures="0" data-risk-score="40.0" data-failure-rate="33.3">
+                                            <td>elbv2</td>
+                                            <td>9</td>
+                                            <td>3</td>
+                                            <td>33.3%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-medium">40.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="kms" data-critical-failures="0"
+                                            data-high-failures="0" data-risk-score="40.0" data-failure-rate="6.7">
+                                            <td>kms</td>
+                                            <td>15</td>
+                                            <td>1</td>
+                                            <td>6.7%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-medium">40.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="networkfirewall"
+                                            data-critical-failures="0" data-high-failures="0" data-risk-score="40.0"
+                                            data-failure-rate="100.0">
+                                            <td>networkfirewall</td>
+                                            <td>9</td>
+                                            <td>9</td>
+                                            <td>100.0%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-medium">40.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="route53" data-critical-failures="0"
+                                            data-high-failures="0" data-risk-score="40.0" data-failure-rate="50.0">
+                                            <td>route53</td>
+                                            <td>2</td>
+                                            <td>1</td>
+                                            <td>50.0%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-medium">40.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="wafv2" data-critical-failures="0"
+                                            data-high-failures="0" data-risk-score="40.0" data-failure-rate="33.3">
+                                            <td>wafv2</td>
+                                            <td>6</td>
+                                            <td>2</td>
+                                            <td>33.3%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-medium">40.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="apigatewayv2"
+                                            data-critical-failures="0" data-high-failures="0" data-risk-score="40.0"
+                                            data-failure-rate="100.0">
+                                            <td>apigatewayv2</td>
+                                            <td>2</td>
+                                            <td>2</td>
+                                            <td>100.0%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-medium">40.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="autoscaling"
+                                            data-critical-failures="0" data-high-failures="0" data-risk-score="40.0"
+                                            data-failure-rate="33.3">
+                                            <td>autoscaling</td>
+                                            <td>3</td>
+                                            <td>1</td>
+                                            <td>33.3%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-medium">40.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="ecr" data-critical-failures="0"
+                                            data-high-failures="0" data-risk-score="36.4" data-failure-rate="61.1">
+                                            <td>ecr</td>
+                                            <td>36</td>
+                                            <td>22</td>
+                                            <td>61.1%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-low">36.4</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="apigateway"
+                                            data-critical-failures="0" data-high-failures="0" data-risk-score="36.0"
+                                            data-failure-rate="71.4">
+                                            <td>apigateway</td>
+                                            <td>14</td>
+                                            <td>10</td>
+                                            <td>71.4%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-low">36.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="cloudtrail"
+                                            data-critical-failures="0" data-high-failures="0" data-risk-score="30.9"
+                                            data-failure-rate="9.0">
+                                            <td>cloudtrail</td>
+                                            <td>588</td>
+                                            <td>53</td>
+                                            <td>9.0%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-low">30.9</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="mq" data-critical-failures="0"
+                                            data-high-failures="0" data-risk-score="28.9" data-failure-rate="45.0">
+                                            <td>mq</td>
+                                            <td>20</td>
+                                            <td>9</td>
+                                            <td>45.0%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-low">28.9</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="accessanalyzer"
+                                            data-critical-failures="0" data-high-failures="0" data-risk-score="20.0"
+                                            data-failure-rate="100.0">
+                                            <td>accessanalyzer</td>
+                                            <td>187</td>
+                                            <td>187</td>
+                                            <td>100.0%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-low">20.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="backup" data-critical-failures="0"
+                                            data-high-failures="0" data-risk-score="20.0" data-failure-rate="100.0">
+                                            <td>backup</td>
+                                            <td>11</td>
+                                            <td>11</td>
+                                            <td>100.0%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-low">20.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="macie" data-critical-failures="0"
+                                            data-high-failures="0" data-risk-score="20.0" data-failure-rate="100.0">
+                                            <td>macie</td>
+                                            <td>12</td>
+                                            <td>12</td>
+                                            <td>100.0%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-low">20.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="resourceexplorer2"
+                                            data-critical-failures="0" data-high-failures="0" data-risk-score="20.0"
+                                            data-failure-rate="100.0">
+                                            <td>resourceexplorer2</td>
+                                            <td>11</td>
+                                            <td>11</td>
+                                            <td>100.0%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-low">20.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="ssmincidents"
+                                            data-critical-failures="0" data-high-failures="0" data-risk-score="20.0"
+                                            data-failure-rate="100.0">
+                                            <td>ssmincidents</td>
+                                            <td>11</td>
+                                            <td>11</td>
+                                            <td>100.0%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-low">20.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="trustedadvisor"
+                                            data-critical-failures="0" data-high-failures="0" data-risk-score="20.0"
+                                            data-failure-rate="50.0">
+                                            <td>trustedadvisor</td>
+                                            <td>22</td>
+                                            <td>11</td>
+                                            <td>50.0%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-low">20.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="emr" data-critical-failures="0"
+                                            data-high-failures="0" data-risk-score="0.0" data-failure-rate="0.0">
+                                            <td>emr</td>
+                                            <td>187</td>
+                                            <td>0</td>
+                                            <td>0.0%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-low">0.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="eventbridge"
+                                            data-critical-failures="0" data-high-failures="0" data-risk-score="0.0"
+                                            data-failure-rate="0.0">
+                                            <td>eventbridge</td>
+                                            <td>374</td>
+                                            <td>0</td>
+                                            <td>0.0%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-low">0.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="organizations"
+                                            data-critical-failures="0" data-high-failures="0" data-risk-score="0.0"
+                                            data-failure-rate="0.0">
+                                            <td>organizations</td>
+                                            <td>11</td>
+                                            <td>0</td>
+                                            <td>0.0%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-low">0.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="transfer" data-critical-failures="0"
+                                            data-high-failures="0" data-risk-score="0.0" data-failure-rate="0.0">
+                                            <td>transfer</td>
+                                            <td>2</td>
+                                            <td>0</td>
+                                            <td>0.0%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-low">0.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="acm" data-critical-failures="0"
+                                            data-high-failures="0" data-risk-score="0.0" data-failure-rate="0.0">
+                                            <td>acm</td>
+                                            <td>6</td>
+                                            <td>0</td>
+                                            <td>0.0%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-low">0.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="sqs" data-critical-failures="0"
+                                            data-high-failures="0" data-risk-score="0.0" data-failure-rate="0.0">
+                                            <td>sqs</td>
+                                            <td>2</td>
+                                            <td>0</td>
+                                            <td>0.0%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-low">0.0</span></td>
+                                        </tr>
+
+                                        <tr class="service-row" data-service-name="ssm" data-critical-failures="0"
+                                            data-high-failures="0" data-risk-score="0.0" data-failure-rate="0.0">
+                                            <td>ssm</td>
+                                            <td>2</td>
+                                            <td>0</td>
+                                            <td>0.0%</td>
+                                            <td><span class="badge bg-danger">0</span></td>
+                                            <td><span class="badge bg-warning">0</span></td>
+                                            <td><span class="risk-score risk-low">0.0</span></td>
+                                        </tr>
+
+                                    </tbody>
+                                </table>
+
+                            </div>
+
+                            <div class="row mt-3">
+                                <div class="col-md-6">
+                                    <div id="serviceTableInfo" class="text-muted">
+                                        <!-- Table info will be populated by JavaScript -->
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <nav aria-label="Service table pagination">
+                                        <ul class="pagination pagination-sm justify-content-end" id="servicePagination">
+                                            <!-- Pagination will be populated by JavaScript -->
+                                        </ul>
+                                    </nav>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="compliance"></div>
+
+            <div class="row mb-4" id="insights">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>🔍 Security Insights & Recommendations</h5>
+                        </div>
+                        <div class="card-body">
+
+                            <div class="alert alert-danger" role="alert">
+                                <h6 class="alert-heading">🚨 Critical Security Issues Detected</h6>
+                                <p class="mb-2">19 critical security findings require immediate attention.</p>
+                                <hr>
+                                <p class="mb-0"><strong>Recommendation:</strong> Prioritize remediation of critical
+                                    findings to reduce security risk.</p>
+                            </div>
+
+                            <div class="alert alert-warning" role="alert">
+                                <h6 class="alert-heading">⚠️ Account Security Concerns</h6>
+                                <p class="mb-2">Account 'AWS-Testing-004' has a 52.2% pass rate.</p>
+                                <hr>
+                                <p class="mb-0"><strong>Recommendation:</strong> Review and strengthen security controls
+                                    for underperforming accounts.</p>
+                            </div>
+
+                            <div class="alert alert-success" role="alert">
+                                <h6 class="alert-heading">✅ Strong Security Posture</h6>
+                                <p class="mb-2">Overall security score of 84.1% indicates good security practices.</p>
+                                <hr>
+                                <p class="mb-0"><strong>Recommendation:</strong> Maintain current security standards and
+                                    monitor for new threats.</p>
+                            </div>
+
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+            <div class="row mb-4" id="roadmap">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>🛣️ Security Improvement Roadmap</h5>
+                            <p class="mb-0 text-muted">Strategic plan to address 192 security findings</p>
+                        </div>
+                        <div class="card-body">
+                            <div class="row mb-4">
+                                <div class="col-md-8">
+                                    <canvas id="roadmapChart" height="300"></canvas>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="roadmap-summary">
+                                        <h6>📊 Roadmap Summary</h6>
+                                        <div class="mb-3">
+                                            <div class="d-flex justify-content-between">
+                                                <span>Total Issues:</span>
+                                                <strong>192</strong>
+                                            </div>
+                                            <div class="d-flex justify-content-between">
+                                                <span>Total Effort:</span>
+                                                <strong>215.5 weeks</strong>
+                                            </div>
+                                            <div class="d-flex justify-content-between">
+                                                <span>Critical Issues:</span>
+                                                <strong class="text-danger">6</strong>
+                                            </div>
+                                            <div class="d-flex justify-content-between">
+                                                <span>High Priority:</span>
+                                                <strong class="text-warning">24</strong>
+                                            </div>
+                                        </div>
+
+                                        <div class="alert alert-info">
+                                            <small>
+                                                <strong>💡 Recommendation:</strong><br>
+                                                Focus on immediate fixes first to reduce critical risk exposure quickly.
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="card border-danger">
+                                        <div class="card-header bg-danger text-white">
+                                            <h6 class="mb-0">🚨 Immediate (1-2 weeks)</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="mb-2">
+                                                <strong>12 issues</strong> • <span class="text-muted">3.8 weeks
+                                                    effort</span>
+                                            </div>
+                                            <p class="small text-muted mb-3">Critical and high-severity issues requiring
+                                                immediate attention</p>
+
+                                            <div class="roadmap-item mb-2 p-2 border-start border-3 border-danger">
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <div class="flex-grow-1">
+                                                        <small class="fw-bold">Ensure only hardware MFA is enabled
+                                                            f...</small>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            iam • 8 resource(s)
+                                                        </div>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            Enable MFA for 8 account(s)/user(s)
+                                                        </div>
+                                                    </div>
+                                                    <div class="text-end">
+                                                        <span class="badge bg-danger">Critical</span>
+                                                        <div class="text-muted" style="font-size: 0.7rem;">0.4w</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="roadmap-item mb-2 p-2 border-start border-3 border-danger">
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <div class="flex-grow-1">
+                                                        <small class="fw-bold">Ensure MFA is enabled for the root
+                                                            ac...</small>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            iam • 5 resource(s)
+                                                        </div>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            Enable MFA for 5 account(s)/user(s)
+                                                        </div>
+                                                    </div>
+                                                    <div class="text-end">
+                                                        <span class="badge bg-danger">Critical</span>
+                                                        <div class="text-muted" style="font-size: 0.7rem;">0.4w</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="roadmap-item mb-2 p-2 border-start border-3 border-danger">
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <div class="flex-grow-1">
+                                                        <small class="fw-bold">Find secrets in Lambda functions
+                                                            vari...</small>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            awslambda • 3 resource(s)
+                                                        </div>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            Address security configuration for 3 awslambda resource(s)
+                                                        </div>
+                                                    </div>
+                                                    <div class="text-end">
+                                                        <span class="badge bg-danger">Critical</span>
+                                                        <div class="text-muted" style="font-size: 0.7rem;">0.6w</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="roadmap-item mb-2 p-2 border-start border-3 border-danger">
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <div class="flex-grow-1">
+                                                        <small class="fw-bold">Block Public Access Settings enabled
+                                                            ...</small>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            s3 • 1 resource(s)
+                                                        </div>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            Restrict public access for 1 s3 resource(s)
+                                                        </div>
+                                                    </div>
+                                                    <div class="text-end">
+                                                        <span class="badge bg-danger">Critical</span>
+                                                        <div class="text-muted" style="font-size: 0.7rem;">0.2w</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="roadmap-item mb-2 p-2 border-start border-3 border-danger">
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <div class="flex-grow-1">
+                                                        <small class="fw-bold">Ensure no security groups allow
+                                                            ingre...</small>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            ec2 • 1 resource(s)
+                                                        </div>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            Address security configuration for 1 ec2 resource(s)
+                                                        </div>
+                                                    </div>
+                                                    <div class="text-end">
+                                                        <span class="badge bg-danger">Critical</span>
+                                                        <div class="text-muted" style="font-size: 0.7rem;">0.4w</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-4">
+                                    <div class="card border-warning">
+                                        <div class="card-header bg-warning text-dark">
+                                            <h6 class="mb-0">⚠️ Short Term (1-2 months)</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="mb-2">
+                                                <strong>54 issues</strong> • <span class="text-muted">30.5 weeks
+                                                    effort</span>
+                                            </div>
+                                            <p class="small text-muted mb-3">Important security improvements with
+                                                moderate complexity</p>
+
+                                            <div class="roadmap-item mb-2 p-2 border-start border-3 border-warning">
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <div class="flex-grow-1">
+                                                        <small class="fw-bold">ECS containers should be limited to
+                                                            r...</small>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            ecs • 66 resource(s)
+                                                        </div>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            Address security configuration for 66 ecs resource(s)
+                                                        </div>
+                                                    </div>
+                                                    <div class="text-end">
+                                                        <span class="badge bg-warning">High</span>
+                                                        <div class="text-muted" style="font-size: 0.7rem;">2.0w</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="roadmap-item mb-2 p-2 border-start border-3 border-warning">
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <div class="flex-grow-1">
+                                                        <small class="fw-bold">Ensure IAM Service Roles prevents
+                                                            aga...</small>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            iam • 65 resource(s)
+                                                        </div>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            Address security configuration for 65 iam resource(s)
+                                                        </div>
+                                                    </div>
+                                                    <div class="text-end">
+                                                        <span class="badge bg-warning">High</span>
+                                                        <div class="text-muted" style="font-size: 0.7rem;">2.0w</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="roadmap-item mb-2 p-2 border-start border-3 border-warning">
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <div class="flex-grow-1">
+                                                        <small class="fw-bold">Ensure IAM Roles do not have
+                                                            Administ...</small>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            iam • 31 resource(s)
+                                                        </div>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            Address security configuration for 31 iam resource(s)
+                                                        </div>
+                                                    </div>
+                                                    <div class="text-end">
+                                                        <span class="badge bg-warning">High</span>
+                                                        <div class="text-muted" style="font-size: 0.7rem;">4.0w</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="roadmap-item mb-2 p-2 border-start border-3 border-warning">
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <div class="flex-grow-1">
+                                                        <small class="fw-bold">Ensure IAM AWS-Managed policies that
+                                                            ...</small>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            iam • 11 resource(s)
+                                                        </div>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            Address security configuration for 11 iam resource(s)
+                                                        </div>
+                                                    </div>
+                                                    <div class="text-end">
+                                                        <span class="badge bg-warning">High</span>
+                                                        <div class="text-muted" style="font-size: 0.7rem;">2.0w</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="roadmap-item mb-2 p-2 border-start border-3 border-warning">
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <div class="flex-grow-1">
+                                                        <small class="fw-bold">Ensure centralized root credentials
+                                                            m...</small>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            iam • 11 resource(s)
+                                                        </div>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            Address security configuration for 11 iam resource(s)
+                                                        </div>
+                                                    </div>
+                                                    <div class="text-end">
+                                                        <span class="badge bg-warning">High</span>
+                                                        <div class="text-muted" style="font-size: 0.7rem;">2.0w</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-4">
+                                    <div class="card border-success">
+                                        <div class="card-header bg-success text-white">
+                                            <h6 class="mb-0">📈 Long Term (3-6 months)</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="mb-2">
+                                                <strong>126 issues</strong> • <span class="text-muted">181.2 weeks
+                                                    effort</span>
+                                            </div>
+                                            <p class="small text-muted mb-3">Strategic security enhancements and
+                                                architectural improvements</p>
+
+                                            <div class="roadmap-item mb-2 p-2 border-start border-3 border-info">
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <div class="flex-grow-1">
+                                                        <small class="fw-bold">Ensure AWS Config is enabled in all
+                                                            r...</small>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            config • 187 resource(s)
+                                                        </div>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            Address security configuration for 187 config resource(s)
+                                                        </div>
+                                                    </div>
+                                                    <div class="text-end">
+                                                        <span class="badge bg-info">Medium</span>
+                                                        <div class="text-muted" style="font-size: 0.7rem;">2.0w</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="roadmap-item mb-2 p-2 border-start border-3 border-info">
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <div class="flex-grow-1">
+                                                        <small class="fw-bold">Ensure DRS is enabled with jobs.</small>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            drs • 187 resource(s)
+                                                        </div>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            Address security configuration for 187 drs resource(s)
+                                                        </div>
+                                                    </div>
+                                                    <div class="text-end">
+                                                        <span class="badge bg-info">Medium</span>
+                                                        <div class="text-muted" style="font-size: 0.7rem;">2.0w</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="roadmap-item mb-2 p-2 border-start border-3 border-info">
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <div class="flex-grow-1">
+                                                        <small class="fw-bold">Check if Inspector2 is enabled for
+                                                            Am...</small>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            inspector2 • 187 resource(s)
+                                                        </div>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            Address security configuration for 187 inspector2
+                                                            resource(s)
+                                                        </div>
+                                                    </div>
+                                                    <div class="text-end">
+                                                        <span class="badge bg-info">Medium</span>
+                                                        <div class="text-muted" style="font-size: 0.7rem;">2.0w</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="roadmap-item mb-2 p-2 border-start border-3 border-info">
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <div class="flex-grow-1">
+                                                        <small class="fw-bold">Check if GuardDuty is enabled</small>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            guardduty • 186 resource(s)
+                                                        </div>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            Address security configuration for 186 guardduty resource(s)
+                                                        </div>
+                                                    </div>
+                                                    <div class="text-end">
+                                                        <span class="badge bg-info">Medium</span>
+                                                        <div class="text-muted" style="font-size: 0.7rem;">2.0w</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="roadmap-item mb-2 p-2 border-start border-3 border-info">
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <div class="flex-grow-1">
+                                                        <small class="fw-bold">Check if Security Hub is enabled and
+                                                            ...</small>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            securityhub • 186 resource(s)
+                                                        </div>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                                            Address security configuration for 186 securityhub
+                                                            resource(s)
+                                                        </div>
+                                                    </div>
+                                                    <div class="text-end">
+                                                        <span class="badge bg-info">Medium</span>
+                                                        <div class="text-muted" style="font-size: 0.7rem;">2.0w</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+            <div class="row mb-4" id="methodology">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>📊 Score Calculation Methodology</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6 class="text-primary">🛡️ Overall Security Score</h6>
+                                    <p class="text-muted">The Overall Security Score represents the percentage of
+                                        security controls that are properly configured across all AWS accounts.</p>
+
+                                    <div class="bg-light p-3 rounded mb-3">
+                                        <h6 class="mb-2">Calculation Formula:</h6>
+                                        <code
+                                            class="d-block mb-2">Security Score = 100 - (Weighted Penalty / Max Possible Penalty × 100)</code>
+
+                                        <h6 class="mb-2 mt-3">Severity Weights:</h6>
+                                        <ul class="list-unstyled">
+                                            <li><span class="badge bg-danger me-2">Critical</span> Weight: 10</li>
+                                            <li><span class="badge bg-warning me-2">High</span> Weight: 7</li>
+                                            <li><span class="badge bg-info me-2">Medium</span> Weight: 4</li>
+                                            <li><span class="badge bg-success me-2">Low</span> Weight: 2</li>
+                                            <li><span class="badge bg-secondary me-2">Info</span> Weight: 1</li>
+                                        </ul>
+                                    </div>
+
+                                    <div class="alert alert-info">
+                                        <small>
+                                            <strong>Example:</strong> If you have 1 Critical failure (10 points) out of
+                                            100 total findings,
+                                            the penalty would be 10/1000 = 1%, resulting in a 99% security score.
+                                        </small>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <h6 class="text-primary">⚠️ Risk Score (Per Account/Service)</h6>
+                                    <p class="text-muted">Risk Scores are calculated for individual accounts and
+                                        services based on their failed security findings.</p>
+
+                                    <div class="bg-light p-3 rounded mb-3">
+                                        <h6 class="mb-2">Calculation Formula:</h6>
+                                        <code
+                                            class="d-block mb-2">Risk Score = (Weighted Failed Findings / Max Possible × 100)</code>
+
+                                        <h6 class="mb-2 mt-3">Risk Score Interpretation:</h6>
+                                        <ul class="list-unstyled">
+                                            <li><span class="risk-score risk-high me-2">70-100</span> High Risk</li>
+                                            <li><span class="risk-score risk-medium me-2">40-69</span> Medium Risk</li>
+                                            <li><span class="risk-score risk-low me-2">0-39</span> Low Risk</li>
+                                        </ul>
+                                    </div>
+
+                                    <div class="alert alert-warning">
+                                        <small>
+                                            <strong>Note:</strong> Risk Scores focus only on failed findings, while the
+                                            Overall Security Score
+                                            considers all findings (passed and failed) to provide a comprehensive
+                                            security posture view.
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <hr class="my-4">
+
+                            <div class="row">
+                                <div class="col-12">
+                                    <h6 class="text-primary">🎯 Key Differences</h6>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th>Metric</th>
+                                                    <th>Scope</th>
+                                                    <th>Purpose</th>
+                                                    <th>Range</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr>
+                                                    <td><strong>Overall Security Score</strong></td>
+                                                    <td>All findings (passed + failed)</td>
+                                                    <td>Comprehensive security posture</td>
+                                                    <td>0-100% (higher is better)</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><strong>Risk Score</strong></td>
+                                                    <td>Failed findings only</td>
+                                                    <td>Risk level assessment</td>
+                                                    <td>0-100 (higher is worse)</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mt-3">
+                                <div class="alert alert-light border">
+                                    <h6 class="mb-2">💡 Understanding Your Scores</h6>
+                                    <ul class="mb-0">
+                                        <li><strong>High Security Score (80%+):</strong> Good security posture with most
+                                            controls properly configured</li>
+                                        <li><strong>Medium Security Score (60-79%):</strong> Moderate security posture
+                                            with room for improvement</li>
+                                        <li><strong>Low Security Score (<60%):< /strong> Significant security gaps
+                                                    requiring immediate attention</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // Dashboard functionality
+
+
+        // Global data storage for filtering
+        let originalData = {};
+        let currentFilter = 'all';
+
+
+
+        // Add insights toggle functionality
+        function toggleInsights(sectionId) {
+            const section = document.getElementById(sectionId);
+            const button = event.target;
+
+            if (section.style.display === 'none') {
+                section.style.display = 'block';
+                button.textContent = button.textContent.replace('Show', 'Hide');
+            } else {
+                section.style.display = 'none';
+                button.textContent = button.textContent.replace('Hide', 'Show');
+            }
+        }
+
+        // Initialize original data for filtering
+        function initializeFilterData() {
+            originalData = {
+                critical: parseInt(document.getElementById('criticalCount').textContent),
+                high: parseInt(document.getElementById('highCount').textContent),
+                total: parseInt(document.getElementById('totalCount').textContent),
+                accounts: parseInt(document.getElementById('accountCount').textContent)
+            };
+        }
+
+        // Apply status filter
+        function applyStatusFilter() {
+            const filter = document.getElementById('statusFilter').value;
+            currentFilter = filter;
+
+            const filterInfo = document.getElementById('filterInfo');
+
+            if (filter === 'all') {
+                // Show all findings
+                document.getElementById('criticalCount').textContent = originalData.critical;
+                document.getElementById('highCount').textContent = originalData.high;
+                document.getElementById('totalCount').textContent = originalData.total;
+                document.getElementById('totalLabel').textContent = 'Total Findings';
+                filterInfo.innerHTML = '<small><strong>Current View:</strong> Showing all findings across all statuses</small>';
+                filterInfo.className = 'alert alert-info mb-0';
+            } else if (filter === 'Failed') {
+                // Show only failed findings (this is what critical/high represent)
+                document.getElementById('criticalCount').textContent = originalData.critical;
+                document.getElementById('highCount').textContent = originalData.high;
+                document.getElementById('totalCount').textContent = originalData.critical + originalData.high;
+                document.getElementById('totalLabel').textContent = 'Failed Findings';
+                filterInfo.innerHTML = '<small><strong>Current View:</strong> Showing only <span class="badge bg-danger">FAILED</span> findings</small>';
+                filterInfo.className = 'alert alert-danger mb-0';
+            } else if (filter === 'Passed') {
+                // Show only passed findings
+                const passedFindings = originalData.total - (originalData.critical + originalData.high);
+                document.getElementById('criticalCount').textContent = '0';
+                document.getElementById('highCount').textContent = '0';
+                document.getElementById('totalCount').textContent = passedFindings;
+                document.getElementById('totalLabel').textContent = 'Passed Findings';
+                filterInfo.innerHTML = '<small><strong>Current View:</strong> Showing only <span class="badge bg-success">PASSED</span> findings</small>';
+                filterInfo.className = 'alert alert-success mb-0';
+            } else if (filter === 'Manual') {
+                // Show manual findings (estimated)
+                document.getElementById('criticalCount').textContent = '0';
+                document.getElementById('highCount').textContent = '0';
+                document.getElementById('totalCount').textContent = '0';
+                document.getElementById('totalLabel').textContent = 'Manual Findings';
+                filterInfo.innerHTML = '<small><strong>Current View:</strong> Showing only <span class="badge bg-warning">MANUAL</span> findings</small>';
+                filterInfo.className = 'alert alert-warning mb-0';
+            }
+
+            // Update charts based on filter
+            updateSeverityChart(filter);
+            updateAccountChart(filter);
+            // updateComplianceChart(filter);  // Temporarily disabled
+        }
+
+        // Update severity distribution chart based on filter
+        function updateSeverityChart(filter) {
+            const chart = chartInstances['severityChart'];
+            if (!chart || !originalChartData['severityChart']) return;
+
+            const originalData = originalChartData['severityChart'];
+            let newData = [...originalData.datasets[0].data];
+            let newLabels = [...originalData.labels];
+
+            if (filter === 'Failed') {
+                // Show only Critical and High (failed findings)
+                const criticalIndex = newLabels.indexOf('Critical');
+                const highIndex = newLabels.indexOf('High');
+                const mediumIndex = newLabels.indexOf('Medium');
+                const lowIndex = newLabels.indexOf('Low');
+
+                // Zero out Medium and Low for failed filter
+                if (mediumIndex !== -1) newData[mediumIndex] = 0;
+                if (lowIndex !== -1) newData[lowIndex] = 0;
+
+            } else if (filter === 'Passed') {
+                // Show only Medium and Low (passed findings)
+                const criticalIndex = newLabels.indexOf('Critical');
+                const highIndex = newLabels.indexOf('High');
+
+                // Zero out Critical and High for passed filter
+                if (criticalIndex !== -1) newData[criticalIndex] = 0;
+                if (highIndex !== -1) newData[highIndex] = 0;
+
+            } else if (filter === 'Manual') {
+                // Zero out all data for manual (no manual findings in current data)
+                newData = newData.map(() => 0);
+            }
+            // 'all' filter shows original data (no changes needed)
+
+            chart.data.datasets[0].data = newData;
+            chart.update();
+        }
+
+        // Update account comparison chart based on filter
+        function updateAccountChart(filter) {
+            const chart = chartInstances['accountChart'];
+            if (!chart || !originalChartData['accountChart']) return;
+
+            const originalData = originalChartData['accountChart'];
+
+            if (filter === 'all') {
+                // Restore original data for all datasets
+                chart.data.datasets.forEach((dataset, index) => {
+                    dataset.data = [...originalData.datasets[index].data];
+                });
+
+            } else if (filter === 'Failed') {
+                // Show only Critical and High findings (failed)
+                chart.data.datasets.forEach((dataset, index) => {
+                    if (dataset.label === 'Critical' || dataset.label === 'High') {
+                        dataset.data = [...originalData.datasets[index].data];
+                    } else {
+                        // Zero out Medium and Low
+                        dataset.data = originalData.datasets[index].data.map(() => 0);
+                    }
+                });
+
+            } else if (filter === 'Passed') {
+                // Show only Medium and Low findings (passed)
+                chart.data.datasets.forEach((dataset, index) => {
+                    if (dataset.label === 'Medium' || dataset.label === 'Low') {
+                        dataset.data = [...originalData.datasets[index].data];
+                    } else {
+                        // Zero out Critical and High
+                        dataset.data = originalData.datasets[index].data.map(() => 0);
+                    }
+                });
+
+            } else if (filter === 'Manual') {
+                // Zero out all data for manual (no manual findings in current data)
+                chart.data.datasets.forEach((dataset, index) => {
+                    dataset.data = originalData.datasets[index].data.map(() => 0);
+                });
+            }
+
+            chart.update();
+        }
+
+        // Update compliance chart based on filter - DISABLED
+        // function updateComplianceChart(filter) { ... }
+
+        // Account table filtering and pagination
+        let currentAccountPage = 1;
+        let accountsPerPage = 10;
+        let filteredAccountRows = [];
+
+        function filterAccountTable() {
+            const nameFilter = document.getElementById('accountNameFilter').value.toLowerCase();
+            const numberFilter = document.getElementById('accountNumberFilter').value.toLowerCase();
+            const allRows = document.querySelectorAll('.account-row');
+
+            filteredAccountRows = Array.from(allRows).filter(row => {
+                const accountName = row.getAttribute('data-account-name');
+                const accountId = row.getAttribute('data-account-id').toLowerCase();
+
+                const nameMatch = !nameFilter || accountName.includes(nameFilter);
+                const numberMatch = !numberFilter || accountId.includes(numberFilter);
+
+                return nameMatch && numberMatch;
+            });
+
+            currentAccountPage = 1;
+            displayAccountPage();
+            updateAccountPagination();
+        }
+
+        function displayAccountPage() {
+            const allRows = document.querySelectorAll('.account-row');
+
+            // Hide all rows first
+            allRows.forEach(row => row.style.display = 'none');
+
+            // Calculate start and end indices
+            const startIndex = (currentAccountPage - 1) * accountsPerPage;
+            const endIndex = startIndex + accountsPerPage;
+
+            // Show rows for current page
+            filteredAccountRows.slice(startIndex, endIndex).forEach(row => {
+                row.style.display = '';
+            });
+
+            updateAccountTableInfo();
+        }
+
+        function updateAccountPagination() {
+            const totalPages = Math.ceil(filteredAccountRows.length / accountsPerPage);
+            const pagination = document.getElementById('accountPagination');
+
+            if (totalPages <= 1) {
+                pagination.innerHTML = '';
+                return;
+            }
+
+            let paginationHTML = '';
+
+            // Previous button
+            if (currentAccountPage > 1) {
+                paginationHTML += `<li class="page-item"><a class="page-link" href="#" onclick="changeAccountPage(${currentAccountPage - 1})">Previous</a></li>`;
+            } else {
+                paginationHTML += `<li class="page-item disabled"><span class="page-link">Previous</span></li>`;
+            }
+
+            // Page numbers
+            const maxVisiblePages = 5;
+            let startPage = Math.max(1, currentAccountPage - Math.floor(maxVisiblePages / 2));
+            let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+            if (endPage - startPage + 1 < maxVisiblePages) {
+                startPage = Math.max(1, endPage - maxVisiblePages + 1);
+            }
+
+            for (let i = startPage; i <= endPage; i++) {
+                if (i === currentAccountPage) {
+                    paginationHTML += `<li class="page-item active"><span class="page-link">${i}</span></li>`;
+                } else {
+                    paginationHTML += `<li class="page-item"><a class="page-link" href="#" onclick="changeAccountPage(${i})">${i}</a></li>`;
+                }
+            }
+
+            // Next button
+            if (currentAccountPage < totalPages) {
+                paginationHTML += `<li class="page-item"><a class="page-link" href="#" onclick="changeAccountPage(${currentAccountPage + 1})">Next</a></li>`;
+            } else {
+                paginationHTML += `<li class="page-item disabled"><span class="page-link">Next</span></li>`;
+            }
+
+            pagination.innerHTML = paginationHTML;
+        }
+
+        function changeAccountPage(page) {
+            currentAccountPage = page;
+            displayAccountPage();
+            updateAccountPagination();
+        }
+
+        function updateAccountTableInfo() {
+            const totalAccounts = filteredAccountRows.length;
+            const startIndex = (currentAccountPage - 1) * accountsPerPage + 1;
+            const endIndex = Math.min(currentAccountPage * accountsPerPage, totalAccounts);
+
+            const info = document.getElementById('accountTableInfo');
+            if (totalAccounts === 0) {
+                info.textContent = 'No accounts found matching the filter criteria.';
+            } else {
+                info.textContent = `Showing ${startIndex}-${endIndex} of ${totalAccounts} accounts`;
+            }
+        }
+
+        function clearAccountFilters() {
+            document.getElementById('accountNameFilter').value = '';
+            document.getElementById('accountNumberFilter').value = '';
+            filterAccountTable();
+        }
+
+        function initializeAccountTable() {
+            const allRows = document.querySelectorAll('.account-row');
+            filteredAccountRows = Array.from(allRows);
+            displayAccountPage();
+            updateAccountPagination();
+        }
+
+        // Service table filtering and pagination
+        let currentServicePage = 1;
+        let servicesPerPage = 10;
+        let filteredServiceRows = [];
+
+        function filterServiceTable() {
+            const nameFilter = document.getElementById('serviceNameFilter').value.toLowerCase();
+            const allRows = document.querySelectorAll('.service-row');
+
+            filteredServiceRows = Array.from(allRows).filter(row => {
+                const serviceName = row.getAttribute('data-service-name');
+                return !nameFilter || serviceName.includes(nameFilter);
+            });
+
+            currentServicePage = 1;
+            displayServicePage();
+            updateServicePagination();
+        }
+
+        function displayServicePage() {
+            const allRows = document.querySelectorAll('.service-row');
+
+            // Hide all rows first
+            allRows.forEach(row => row.style.display = 'none');
+
+            // Calculate start and end indices
+            const startIndex = (currentServicePage - 1) * servicesPerPage;
+            const endIndex = startIndex + servicesPerPage;
+
+            // Show rows for current page
+            filteredServiceRows.slice(startIndex, endIndex).forEach(row => {
+                row.style.display = '';
+            });
+
+            updateServiceTableInfo();
+        }
+
+        function updateServicePagination() {
+            const totalPages = Math.ceil(filteredServiceRows.length / servicesPerPage);
+            const pagination = document.getElementById('servicePagination');
+
+            if (totalPages <= 1) {
+                pagination.innerHTML = '';
+                return;
+            }
+
+            let paginationHTML = '';
+
+            // Previous button
+            if (currentServicePage > 1) {
+                paginationHTML += `<li class="page-item"><a class="page-link" href="#" onclick="changeServicePage(${currentServicePage - 1})">Previous</a></li>`;
+            } else {
+                paginationHTML += `<li class="page-item disabled"><span class="page-link">Previous</span></li>`;
+            }
+
+            // Page numbers
+            const maxVisiblePages = 5;
+            let startPage = Math.max(1, currentServicePage - Math.floor(maxVisiblePages / 2));
+            let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+            if (endPage - startPage + 1 < maxVisiblePages) {
+                startPage = Math.max(1, endPage - maxVisiblePages + 1);
+            }
+
+            for (let i = startPage; i <= endPage; i++) {
+                if (i === currentServicePage) {
+                    paginationHTML += `<li class="page-item active"><span class="page-link">${i}</span></li>`;
+                } else {
+                    paginationHTML += `<li class="page-item"><a class="page-link" href="#" onclick="changeServicePage(${i})">${i}</a></li>`;
+                }
+            }
+
+            // Next button
+            if (currentServicePage < totalPages) {
+                paginationHTML += `<li class="page-item"><a class="page-link" href="#" onclick="changeServicePage(${currentServicePage + 1})">Next</a></li>`;
+            } else {
+                paginationHTML += `<li class="page-item disabled"><span class="page-link">Next</span></li>`;
+            }
+
+            pagination.innerHTML = paginationHTML;
+        }
+
+        function changeServicePage(page) {
+            currentServicePage = page;
+            displayServicePage();
+            updateServicePagination();
+        }
+
+        function updateServiceTableInfo() {
+            const totalServices = filteredServiceRows.length;
+            const startIndex = (currentServicePage - 1) * servicesPerPage + 1;
+            const endIndex = Math.min(currentServicePage * servicesPerPage, totalServices);
+
+            const info = document.getElementById('serviceTableInfo');
+            if (totalServices === 0) {
+                info.textContent = 'No services found matching the filter criteria.';
+            } else {
+                info.textContent = `Showing ${startIndex}-${endIndex} of ${totalServices} services`;
+            }
+        }
+
+        function clearServiceFilters() {
+            document.getElementById('serviceNameFilter').value = '';
+            filterServiceTable();
+        }
+
+        function initializeServiceTable() {
+            const allRows = document.querySelectorAll('.service-row');
+            filteredServiceRows = Array.from(allRows);
+            displayServicePage();
+            updateServicePagination();
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function () {
+            initializeFilterData();
+            initializeAccountTable();
+            initializeServiceTable();
+        });
+
+        // Navigation functionality
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+
+            sidebar.classList.toggle('show');
+            overlay.classList.toggle('show');
+        }
+
+        function scrollToSection(sectionId) {
+            const element = document.getElementById(sectionId);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                // Close sidebar on mobile after navigation
+                if (window.innerWidth <= 768) {
+                    toggleSidebar();
+                }
+            }
+        }
+
+
+
+
+
+        // Close sidebar when clicking outside on mobile
+        document.addEventListener('click', function (event) {
+            const sidebar = document.getElementById('sidebar');
+            const sidebarToggle = event.target.closest('[onclick*="toggleSidebar"]');
+
+            if (!sidebar.contains(event.target) && !sidebarToggle && sidebar.classList.contains('show')) {
+                toggleSidebar();
+            }
+        });
+
+        // Handle window resize
+        window.addEventListener('resize', function () {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+
+            if (window.innerWidth > 768 && sidebar.classList.contains('show')) {
+                sidebar.classList.remove('show');
+                overlay.classList.remove('show');
+            }
+        });
+
+
+        // Initialize charts
+
+        // Global chart instances for filtering
+        let chartInstances = {};
+        let originalChartData = {};
+
+        try {
+            const severityChartCtx = document.getElementById('severityChart');
+            if (severityChartCtx) {
+                const chartConfig = { "type": "pie", "data": { "labels": ["Medium", "Low", "High", "Critical"], "datasets": [{ "data": [2393, 692, 226, 19], "backgroundColor": ["#ffc107", "#28a745", "#fd7e14", "#dc3545"], "borderWidth": 2, "borderColor": "#fff" }] }, "options": { "responsive": true, "maintainAspectRatio": false, "plugins": { "legend": { "position": "bottom" }, "tooltip": { "mode": "nearest", "intersect": true } } } };
+                chartInstances['severityChart'] = new Chart(severityChartCtx, chartConfig);
+
+                // Store original data for filtering
+                originalChartData['severityChart'] = {
+                    labels: [...chartConfig.data.labels],
+                    datasets: chartConfig.data.datasets.map(dataset => ({
+                        ...dataset,
+                        data: [...dataset.data]
+                    }))
+                };
+            }
+        } catch (error) {
+            console.error('Error initializing severityChart:', error);
+        }
+
+        try {
+            const accountChartCtx = document.getElementById('accountChart');
+            if (accountChartCtx) {
+                const chartConfig = { "type": "bar", "data": { "labels": ["AWS-Production-001", "AWS-Development-002", "AWS-Staging-003", "AWS-Testing-004", "AWS-Logging-005", "AWS-Analytics-006", "AWS-Communications-007", "AWS-Integration-008", "AWS-Security-009", "AWS-Communications-Dev-010"], "datasets": [{ "label": "Critical", "data": [2, 2, 2, 3, 3, 2, 0, 2, 1, 0], "backgroundColor": "#dc3545", "stack": "failures" }, { "label": "High", "data": [15, 26, 16, 6, 13, 115, 5, 7, 5, 6], "backgroundColor": "#fd7e14", "stack": "failures" }, { "label": "Medium", "data": [246, 239, 186, 141, 197, 432, 130, 169, 147, 155], "backgroundColor": "#ffc107", "stack": "failures" }, { "label": "Low", "data": [38, 55, 38, 28, 45, 247, 23, 38, 30, 37], "backgroundColor": "#28a745", "stack": "failures" }] }, "options": { "responsive": true, "maintainAspectRatio": false, "scales": { "x": { "stacked": true, "ticks": { "maxRotation": 45 } }, "y": { "stacked": true, "beginAtZero": true } }, "plugins": { "legend": { "position": "top" }, "tooltip": { "mode": "index", "intersect": false } } } };
+                chartInstances['accountChart'] = new Chart(accountChartCtx, chartConfig);
+
+                // Store original data for filtering
+                originalChartData['accountChart'] = {
+                    labels: [...chartConfig.data.labels],
+                    datasets: chartConfig.data.datasets.map(dataset => ({
+                        ...dataset,
+                        data: [...dataset.data]
+                    }))
+                };
+            }
+        } catch (error) {
+            console.error('Error initializing accountChart:', error);
+        }
+
+        try {
+            const serviceChartCtx = document.getElementById('serviceChart');
+            if (serviceChartCtx) {
+                const chartConfig = { "type": "bar", "data": { "labels": ["iam", "awslambda", "ec2", "s3", "ecs", "sns", "eks", "guardduty", "cloudfront", "rds"], "datasets": [{ "label": "Risk Score", "data": [51.9, 48.0, 40.2, 33.9, 45.2, 70.0, 55.0, 40.2, 34.4, 27.0], "backgroundColor": ["#fd7e14", "#fd7e14", "#fd7e14", "#ffc107", "#fd7e14", "#dc3545", "#fd7e14", "#fd7e14", "#ffc107", "#ffc107"], "borderWidth": 1, "yAxisID": "y" }, { "label": "Failed Findings", "data": [353, 10, 183, 708, 133, 2, 2, 189, 16, 81], "backgroundColor": "rgba(54, 162, 235, 0.6)", "borderColor": "rgba(54, 162, 235, 1)", "borderWidth": 1, "type": "line", "yAxisID": "y1", "tension": 0.4 }] }, "options": { "responsive": true, "maintainAspectRatio": false, "interaction": { "mode": "index", "intersect": false }, "scales": { "x": { "display": true, "title": { "display": true, "text": "AWS Services" }, "ticks": { "maxRotation": 45, "minRotation": 45 } }, "y": { "type": "linear", "display": true, "position": "left", "title": { "display": true, "text": "Risk Score (0-100)" }, "beginAtZero": true, "max": 100 }, "y1": { "type": "linear", "display": true, "position": "right", "title": { "display": true, "text": "Failed Findings Count" }, "beginAtZero": true, "grid": { "drawOnChartArea": false } } }, "plugins": { "legend": { "position": "top" }, "tooltip": { "mode": "index", "intersect": false } } } };
+                chartInstances['serviceChart'] = new Chart(serviceChartCtx, chartConfig);
+
+                // Store original data for filtering
+                originalChartData['serviceChart'] = {
+                    labels: [...chartConfig.data.labels],
+                    datasets: chartConfig.data.datasets.map(dataset => ({
+                        ...dataset,
+                        data: [...dataset.data]
+                    }))
+                };
+            }
+        } catch (error) {
+            console.error('Error initializing serviceChart:', error);
+        }
+
+        try {
+            const checksChartCtx = document.getElementById('checksChart');
+            if (checksChartCtx) {
+                const chartConfig = { "type": "bar", "data": { "labels": ["Check if IAM Access Analyzer is enabled", "Ensure AWS Config is enabled in all regions.", "Ensure that model invocation logging is enabled for...", "Check if Inspector2 is enabled for Amazon EC2...", "Ensure DRS is enabled with jobs.", "Check if GuardDuty is enabled", "Check if Security Hub is enabled and its standard...", "Check if S3 buckets have object lock enabled", "Check if S3 bucket MFA Delete is not enabled.", "Check if S3 buckets use cross region replication."], "datasets": [{ "label": "Failure Count", "data": [187, 187, 187, 187, 187, 186, 186, 80, 80, 80], "backgroundColor": ["#28a745", "#ffc107", "#ffc107", "#ffc107", "#ffc107", "#ffc107", "#ffc107", "#28a745", "#ffc107", "#28a745"], "borderWidth": 1, "fullTitles": ["Check if IAM Access Analyzer is enabled", "Ensure AWS Config is enabled in all regions.", "Ensure that model invocation logging is enabled for Amazon Bedrock.", "Check if Inspector2 is enabled for Amazon EC2 instances, ECR container images and Lambda functions.", "Ensure DRS is enabled with jobs.", "Check if GuardDuty is enabled", "Check if Security Hub is enabled and its standard subscriptions.", "Check if S3 buckets have object lock enabled", "Check if S3 bucket MFA Delete is not enabled.", "Check if S3 buckets use cross region replication."], "checkIds": ["accessanalyzer_enabled", "config_recorder_all_regions_enabled", "bedrock_model_invocation_logging_enabled", "inspector2_is_enabled", "drs_job_exist", "guardduty_is_enabled", "securityhub_enabled", "s3_bucket_object_lock", "s3_bucket_no_mfa_delete", "s3_bucket_cross_region_replication"], "services": ["accessanalyzer", "config", "bedrock", "inspector2", "drs", "guardduty", "securityhub", "s3", "s3", "s3"], "severities": ["Low", "Medium", "Medium", "Medium", "Medium", "Medium", "Medium", "Low", "Medium", "Low"] }] }, "options": { "indexAxis": "y", "responsive": true, "maintainAspectRatio": false, "layout": { "padding": { "left": 20, "right": 20, "top": 10, "bottom": 10 } }, "scales": { "x": { "beginAtZero": true, "title": { "display": true, "text": "Number of Failures" } }, "y": { "title": { "display": true, "text": "Security Checks" }, "ticks": { "maxRotation": 0, "font": { "size": 11 } } } }, "plugins": { "legend": { "display": false }, "tooltip": { "mode": "nearest", "intersect": true } } } };
+
+                // Add custom tooltip callbacks for checks chart
+                if (chartConfig.options && chartConfig.options.plugins && chartConfig.options.plugins.tooltip) {
+                    chartConfig.options.plugins.tooltip.callbacks = {
+                        title: function (context) {
+                            const dataset = context[0].dataset;
+                            const index = context[0].dataIndex;
+                            return dataset.fullTitles ? dataset.fullTitles[index] : context[0].label;
+                        },
+                        label: function (context) {
+                            const dataset = context.dataset;
+                            const index = context.dataIndex;
+                            const labels = [];
+                            labels.push('Failures: ' + context.parsed.x);
+                            if (dataset.severities && dataset.severities[index]) {
+                                labels.push('Severity: ' + dataset.severities[index]);
+                            }
+                            if (dataset.checkIds && dataset.checkIds[index]) {
+                                labels.push('Check ID: ' + dataset.checkIds[index]);
+                            }
+                            if (dataset.services && dataset.services[index]) {
+                                labels.push('Service: ' + dataset.services[index]);
+                            }
+                            return labels;
+                        },
+                        labelColor: function (context) {
+                            return {
+                                borderColor: context.dataset.backgroundColor[context.dataIndex],
+                                backgroundColor: context.dataset.backgroundColor[context.dataIndex]
+                            };
+                        }
+                    };
+                }
+
+                chartInstances['checksChart'] = new Chart(checksChartCtx, chartConfig);
+
+                // Store original data for filtering
+                originalChartData['checksChart'] = {
+                    labels: [...chartConfig.data.labels],
+                    datasets: chartConfig.data.datasets.map(dataset => ({
+                        ...dataset,
+                        data: [...dataset.data]
+                    }))
+                };
+            }
+        } catch (error) {
+            console.error('Error initializing checksChart:', error);
+        }
+
+        try {
+            const regionsChartCtx = document.getElementById('regionsChart');
+            if (regionsChartCtx) {
+                const chartConfig = { "type": "bar", "data": { "labels": ["us-east-2", "us-east-1", "us-west-2", "ap-northeast-1", "ap-northeast-2", "ap-northeast-3", "ap-south-1", "ap-southeast-1", "ap-southeast-2", "ca-central-1", "eu-central-1", "eu-north-1", "eu-west-1", "eu-west-2", "eu-west-3"], "datasets": [{ "label": "Critical", "data": [19, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "backgroundColor": "#dc3545", "borderColor": "#dc3545", "borderWidth": 1, "stack": "failures" }, { "label": "High", "data": [153, 73, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "backgroundColor": "#fd7e14", "borderColor": "#fd7e14", "borderWidth": 1, "stack": "failures" }, { "label": "Medium", "data": [1083, 305, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67], "backgroundColor": "#ffc107", "borderColor": "#ffc107", "borderWidth": 1, "stack": "failures" }, { "label": "Low", "data": [323, 159, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14], "backgroundColor": "#28a745", "borderColor": "#28a745", "borderWidth": 1, "stack": "failures" }] }, "options": { "responsive": true, "maintainAspectRatio": false, "interaction": { "mode": "index", "intersect": false }, "scales": { "x": { "display": true, "stacked": true, "title": { "display": true, "text": "AWS Regions" }, "ticks": { "maxRotation": 45, "minRotation": 45 } }, "y": { "type": "linear", "display": true, "stacked": true, "position": "left", "title": { "display": true, "text": "Number of Failed Findings" }, "beginAtZero": true } }, "plugins": { "legend": { "position": "top" }, "tooltip": { "mode": "index", "intersect": false, "callbacks": { "afterLabel": "function(context) { const regionIndex = context.dataIndex; const regionData = [{\"region\": \"us-east-2\", \"total_findings\": 4072, \"failed_findings\": 1578, \"pass_rate\": 61.2, \"critical_failures\": 19, \"high_failures\": 153, \"medium_failures\": 1083, \"low_failures\": 323, \"risk_score\": 39.5, \"unique_accounts\": 11}, {\"region\": \"us-east-1\", \"total_findings\": 1530, \"failed_findings\": 537, \"pass_rate\": 64.9, \"critical_failures\": 0, \"high_failures\": 73, \"medium_failures\": 305, \"low_failures\": 159, \"risk_score\": 38.2, \"unique_accounts\": 11}, {\"region\": \"us-west-2\", \"total_findings\": 169, \"failed_findings\": 81, \"pass_rate\": 52.1, \"critical_failures\": 0, \"high_failures\": 0, \"medium_failures\": 67, \"low_failures\": 14, \"risk_score\": 36.5, \"unique_accounts\": 11}, {\"region\": \"ap-northeast-1\", \"total_findings\": 158, \"failed_findings\": 81, \"pass_rate\": 48.7, \"critical_failures\": 0, \"high_failures\": 0, \"medium_failures\": 67, \"low_failures\": 14, \"risk_score\": 36.5, \"unique_accounts\": 11}, {\"region\": \"ap-northeast-2\", \"total_findings\": 158, \"failed_findings\": 81, \"pass_rate\": 48.7, \"critical_failures\": 0, \"high_failures\": 0, \"medium_failures\": 67, \"low_failures\": 14, \"risk_score\": 36.5, \"unique_accounts\": 11}, {\"region\": \"ap-northeast-3\", \"total_findings\": 158, \"failed_findings\": 81, \"pass_rate\": 48.7, \"critical_failures\": 0, \"high_failures\": 0, \"medium_failures\": 67, \"low_failures\": 14, \"risk_score\": 36.5, \"unique_accounts\": 11}, {\"region\": \"ap-south-1\", \"total_findings\": 158, \"failed_findings\": 81, \"pass_rate\": 48.7, \"critical_failures\": 0, \"high_failures\": 0, \"medium_failures\": 67, \"low_failures\": 14, \"risk_score\": 36.5, \"unique_accounts\": 11}, {\"region\": \"ap-southeast-1\", \"total_findings\": 158, \"failed_findings\": 81, \"pass_rate\": 48.7, \"critical_failures\": 0, \"high_failures\": 0, \"medium_failures\": 67, \"low_failures\": 14, \"risk_score\": 36.5, \"unique_accounts\": 11}, {\"region\": \"ap-southeast-2\", \"total_findings\": 158, \"failed_findings\": 81, \"pass_rate\": 48.7, \"critical_failures\": 0, \"high_failures\": 0, \"medium_failures\": 67, \"low_failures\": 14, \"risk_score\": 36.5, \"unique_accounts\": 11}, {\"region\": \"ca-central-1\", \"total_findings\": 158, \"failed_findings\": 81, \"pass_rate\": 48.7, \"critical_failures\": 0, \"high_failures\": 0, \"medium_failures\": 67, \"low_failures\": 14, \"risk_score\": 36.5, \"unique_accounts\": 11}, {\"region\": \"eu-central-1\", \"total_findings\": 158, \"failed_findings\": 81, \"pass_rate\": 48.7, \"critical_failures\": 0, \"high_failures\": 0, \"medium_failures\": 67, \"low_failures\": 14, \"risk_score\": 36.5, \"unique_accounts\": 11}, {\"region\": \"eu-north-1\", \"total_findings\": 158, \"failed_findings\": 81, \"pass_rate\": 48.7, \"critical_failures\": 0, \"high_failures\": 0, \"medium_failures\": 67, \"low_failures\": 14, \"risk_score\": 36.5, \"unique_accounts\": 11}, {\"region\": \"eu-west-1\", \"total_findings\": 158, \"failed_findings\": 81, \"pass_rate\": 48.7, \"critical_failures\": 0, \"high_failures\": 0, \"medium_failures\": 67, \"low_failures\": 14, \"risk_score\": 36.5, \"unique_accounts\": 11}, {\"region\": \"eu-west-2\", \"total_findings\": 158, \"failed_findings\": 81, \"pass_rate\": 48.7, \"critical_failures\": 0, \"high_failures\": 0, \"medium_failures\": 67, \"low_failures\": 14, \"risk_score\": 36.5, \"unique_accounts\": 11}, {\"region\": \"eu-west-3\", \"total_findings\": 158, \"failed_findings\": 81, \"pass_rate\": 48.7, \"critical_failures\": 0, \"high_failures\": 0, \"medium_failures\": 67, \"low_failures\": 14, \"risk_score\": 36.5, \"unique_accounts\": 11}][regionIndex]; return [`Total Findings: ${regionData.total_findings}`, `Pass Rate: ${regionData.pass_rate}%`, `Accounts: ${regionData.unique_accounts}`, `Risk Score: ${regionData.risk_score}`]; }" } } } } };
+                chartInstances['regionsChart'] = new Chart(regionsChartCtx, chartConfig);
+
+                // Store original data for filtering
+                originalChartData['regionsChart'] = {
+                    labels: [...chartConfig.data.labels],
+                    datasets: chartConfig.data.datasets.map(dataset => ({
+                        ...dataset,
+                        data: [...dataset.data]
+                    }))
+                };
+            }
+        } catch (error) {
+            console.error('Error initializing regionsChart:', error);
+        }
+
+        try {
+            const roadmapChartCtx = document.getElementById('roadmapChart');
+            if (roadmapChartCtx) {
+                const chartConfig = { "type": "bar", "data": { "labels": ["Immediate\n(1-2 weeks)", "Short Term\n(1-2 months)", "Long Term\n(3-6 months)"], "datasets": [{ "label": "Number of Issues", "data": [12, 54, 126], "backgroundColor": ["#dc354580", "#fd7e1480", "#28a74580"], "borderColor": ["#c82333", "#e0a800", "#1e7e34"], "borderWidth": 2, "yAxisID": "y" }, { "label": "Effort (Weeks)", "data": [3.8, 30.5, 181.2], "backgroundColor": "rgba(54, 162, 235, 0.6)", "borderColor": "rgba(54, 162, 235, 1)", "borderWidth": 2, "type": "line", "yAxisID": "y1", "tension": 0.4, "pointRadius": 6, "pointHoverRadius": 8 }] }, "options": { "responsive": true, "maintainAspectRatio": false, "interaction": { "mode": "index", "intersect": false }, "scales": { "x": { "display": true, "title": { "display": true, "text": "Implementation Timeline" }, "ticks": { "maxRotation": 0, "minRotation": 0 } }, "y": { "type": "linear", "display": true, "position": "left", "title": { "display": true, "text": "Number of Issues" }, "beginAtZero": true }, "y1": { "type": "linear", "display": true, "position": "right", "title": { "display": true, "text": "Effort Required (Weeks)" }, "beginAtZero": true, "grid": { "drawOnChartArea": false } } }, "plugins": { "legend": { "position": "top" }, "tooltip": { "mode": "index", "intersect": false, "callbacks": { "afterLabel": "function(context) { const index = context.dataIndex; const roadmapData = {\"immediate\": {\"count\": 12, \"items\": [{\"title\": \"Ensure only hardware MFA is enabled for the root account\", \"service\": \"iam\", \"severity\": \"Critical\", \"affected_resources\": 8, \"effort_weeks\": 0.4, \"check_id\": \"iam_root_hardware_mfa_enabled\", \"description\": \"Enable MFA for 8 account(s)/user(s)\"}, {\"title\": \"Ensure MFA is enabled for the root account\", \"service\": \"iam\", \"severity\": \"Critical\", \"affected_resources\": 5, \"effort_weeks\": 0.4, \"check_id\": \"iam_root_mfa_enabled\", \"description\": \"Enable MFA for 5 account(s)/user(s)\"}, {\"title\": \"Find secrets in Lambda functions variables.\", \"service\": \"awslambda\", \"severity\": \"Critical\", \"affected_resources\": 3, \"effort_weeks\": 0.6, \"check_id\": \"awslambda_function_no_secrets_in_variables\", \"description\": \"Address security configuration for 3 awslambda resource(s)\"}, {\"title\": \"Block Public Access Settings enabled on Access Points.\", \"service\": \"s3\", \"severity\": \"Critical\", \"affected_resources\": 1, \"effort_weeks\": 0.2, \"check_id\": \"s3_access_point_public_access_block\", \"description\": \"Restrict public access for 1 s3 resource(s)\"}, {\"title\": \"Ensure no security groups allow ingress from 0.0.0.0/0 or ::/0 to all ports.\", \"service\": \"ec2\", \"severity\": \"Critical\", \"affected_resources\": 1, \"effort_weeks\": 0.4, \"check_id\": \"ec2_securitygroup_allow_ingress_from_internet_to_all_ports\", \"description\": \"Address security configuration for 1 ec2 resource(s)\"}, {\"title\": \"Ensure no root account access key exists\", \"service\": \"iam\", \"severity\": \"Critical\", \"affected_resources\": 1, \"effort_weeks\": 0.4, \"check_id\": \"iam_no_root_access_key\", \"description\": \"Address security configuration for 1 iam resource(s)\"}, {\"title\": \"Check S3 Account Level Public Access Block.\", \"service\": \"s3\", \"severity\": \"High\", \"affected_resources\": 10, \"effort_weeks\": 0.4, \"check_id\": \"s3_account_level_public_access_blocks\", \"description\": \"Restrict public access for 10 s3 resource(s)\"}, {\"title\": \"Ensure no security groups allow ingress and egress from wide-open IP address with a mask between 0 and 24.\", \"service\": \"ec2\", \"severity\": \"High\", \"affected_resources\": 1, \"effort_weeks\": 0.2, \"check_id\": \"ec2_securitygroup_allow_wide_open_public_ipv4\", \"description\": \"Restrict public access for 1 ec2 resource(s)\"}, {\"title\": \"ECS services should not assign public IPs automatically\", \"service\": \"ecs\", \"severity\": \"High\", \"affected_resources\": 1, \"effort_weeks\": 0.2, \"check_id\": \"ecs_service_no_assign_public_ip\", \"description\": \"Restrict public access for 1 ecs resource(s)\"}, {\"title\": \"Ensure EKS Clusters are not publicly accessible\", \"service\": \"eks\", \"severity\": \"High\", \"affected_resources\": 1, \"effort_weeks\": 0.2, \"check_id\": \"eks_cluster_not_publicly_accessible\", \"description\": \"Restrict public access for 1 eks resource(s)\"}], \"effort_weeks\": 3.8, \"timeline\": \"1-2 weeks\", \"description\": \"Critical and high-severity issues requiring immediate attention\"}, \"short_term\": {\"count\": 54, \"items\": [{\"title\": \"ECS containers should be limited to read-only access to root filesystems\", \"service\": \"ecs\", \"severity\": \"High\", \"affected_resources\": 66, \"effort_weeks\": 2.0, \"check_id\": \"ecs_task_definitions_containers_readonly_access\", \"description\": \"Address security configuration for 66 ecs resource(s)\"}, {\"title\": \"Ensure IAM Service Roles prevents against a cross-service confused deputy attack\", \"service\": \"iam\", \"severity\": \"High\", \"affected_resources\": 65, \"effort_weeks\": 2.0, \"check_id\": \"iam_role_cross_service_confused_deputy_prevention\", \"description\": \"Address security configuration for 65 iam resource(s)\"}, {\"title\": \"Ensure IAM Roles do not have AdministratorAccess policy attached\", \"service\": \"iam\", \"severity\": \"High\", \"affected_resources\": 31, \"effort_weeks\": 4.0, \"check_id\": \"iam_role_administratoraccess_policy\", \"description\": \"Address security configuration for 31 iam resource(s)\"}, {\"title\": \"Ensure IAM AWS-Managed policies that allow full \\\"*:*\\\" administrative privileges are not attached\", \"service\": \"iam\", \"severity\": \"High\", \"affected_resources\": 11, \"effort_weeks\": 2.0, \"check_id\": \"iam_aws_attached_policy_no_administrative_privileges\", \"description\": \"Address security configuration for 11 iam resource(s)\"}, {\"title\": \"Ensure centralized root credentials management is enabled\", \"service\": \"iam\", \"severity\": \"High\", \"affected_resources\": 11, \"effort_weeks\": 2.0, \"check_id\": \"iam_root_credentials_management_enabled\", \"description\": \"Address security configuration for 11 iam resource(s)\"}, {\"title\": \"Ensure Instance Metadata Service Version 2 (IMDSv2) is enforced for EC2 instances at the account level to protect against SSRF vulnerabilities.\", \"service\": \"ec2\", \"severity\": \"High\", \"affected_resources\": 4, \"effort_weeks\": 0.8, \"check_id\": \"ec2_instance_account_imdsv2_enabled\", \"description\": \"Address security configuration for 4 ec2 resource(s)\"}, {\"title\": \"Ensure no security groups allow ingress from 0.0.0.0/0 or ::/0 to any port.\", \"service\": \"ec2\", \"severity\": \"High\", \"affected_resources\": 3, \"effort_weeks\": 0.6, \"check_id\": \"ec2_securitygroup_allow_ingress_from_internet_to_any_port\", \"description\": \"Address security configuration for 3 ec2 resource(s)\"}, {\"title\": \"Ensure no IAM Inline policies allow actions that may lead into Privilege Escalation\", \"service\": \"iam\", \"severity\": \"High\", \"affected_resources\": 3, \"effort_weeks\": 0.6, \"check_id\": \"iam_inline_policy_allows_privilege_escalation\", \"description\": \"Address security configuration for 3 iam resource(s)\"}, {\"title\": \"Ensure IAM inline policies that allow full \\\"*:*\\\" administrative privileges are not associated to IAM identities\", \"service\": \"iam\", \"severity\": \"High\", \"affected_resources\": 3, \"effort_weeks\": 0.6, \"check_id\": \"iam_inline_policy_no_administrative_privileges\", \"description\": \"Address security configuration for 3 iam resource(s)\"}, {\"title\": \"Ensure the default security group of every VPC restricts all traffic.\", \"service\": \"ec2\", \"severity\": \"High\", \"affected_resources\": 3, \"effort_weeks\": 1.2, \"check_id\": \"ec2_securitygroup_default_restrict_traffic\", \"description\": \"Address security configuration for 3 ec2 resource(s)\"}], \"effort_weeks\": 30.5, \"timeline\": \"1-2 months\", \"description\": \"Important security improvements with moderate complexity\"}, \"long_term\": {\"count\": 126, \"items\": [{\"title\": \"Ensure AWS Config is enabled in all regions.\", \"service\": \"config\", \"severity\": \"Medium\", \"affected_resources\": 187, \"effort_weeks\": 2.0, \"check_id\": \"config_recorder_all_regions_enabled\", \"description\": \"Address security configuration for 187 config resource(s)\"}, {\"title\": \"Ensure DRS is enabled with jobs.\", \"service\": \"drs\", \"severity\": \"Medium\", \"affected_resources\": 187, \"effort_weeks\": 2.0, \"check_id\": \"drs_job_exist\", \"description\": \"Address security configuration for 187 drs resource(s)\"}, {\"title\": \"Check if Inspector2 is enabled for Amazon EC2 instances, ECR container images and Lambda functions.\", \"service\": \"inspector2\", \"severity\": \"Medium\", \"affected_resources\": 187, \"effort_weeks\": 2.0, \"check_id\": \"inspector2_is_enabled\", \"description\": \"Address security configuration for 187 inspector2 resource(s)\"}, {\"title\": \"Check if GuardDuty is enabled\", \"service\": \"guardduty\", \"severity\": \"Medium\", \"affected_resources\": 186, \"effort_weeks\": 2.0, \"check_id\": \"guardduty_is_enabled\", \"description\": \"Address security configuration for 186 guardduty resource(s)\"}, {\"title\": \"Check if Security Hub is enabled and its standard subscriptions.\", \"service\": \"securityhub\", \"severity\": \"Medium\", \"affected_resources\": 186, \"effort_weeks\": 2.0, \"check_id\": \"securityhub_enabled\", \"description\": \"Address security configuration for 186 securityhub resource(s)\"}, {\"title\": \"Check if S3 buckets have event notifications enabled.\", \"service\": \"s3\", \"severity\": \"Medium\", \"affected_resources\": 78, \"effort_weeks\": 2.0, \"check_id\": \"s3_bucket_event_notifications_enabled\", \"description\": \"Address security configuration for 78 s3 resource(s)\"}, {\"title\": \"Check if S3 buckets have secure transport policy.\", \"service\": \"s3\", \"severity\": \"Medium\", \"affected_resources\": 74, \"effort_weeks\": 4.0, \"check_id\": \"s3_bucket_secure_transport_policy\", \"description\": \"Address security configuration for 74 s3 resource(s)\"}, {\"title\": \"Check if CloudWatch log groups are protected by AWS KMS.\", \"service\": \"cloudwatch\", \"severity\": \"Medium\", \"affected_resources\": 55, \"effort_weeks\": 2.0, \"check_id\": \"cloudwatch_log_group_kms_encryption_enabled\", \"description\": \"Address security configuration for 55 cloudwatch resource(s)\"}, {\"title\": \"Ensure users make use of temporary credentials assuming IAM roles\", \"service\": \"iam\", \"severity\": \"Medium\", \"affected_resources\": 28, \"effort_weeks\": 2.0, \"check_id\": \"iam_user_with_temporary_credentials\", \"description\": \"Address security configuration for 28 iam resource(s)\"}, {\"title\": \"Ensure CloudTrail logs are encrypted at rest using KMS CMKs\", \"service\": \"cloudtrail\", \"severity\": \"Medium\", \"affected_resources\": 24, \"effort_weeks\": 2.0, \"check_id\": \"cloudtrail_kms_encryption_enabled\", \"description\": \"Address security configuration for 24 cloudtrail resource(s)\"}], \"effort_weeks\": 181.2, \"timeline\": \"3-6 months\", \"description\": \"Strategic security enhancements and architectural improvements\"}, \"summary\": {\"total_issues\": 192, \"total_effort_weeks\": 215.5, \"critical_count\": 6, \"high_count\": 24}}; const categories = [\"immediate\", \"short_term\", \"long_term\"]; const category = categories[index]; const data = roadmapData[category]; return [`Timeline: ${data.timeline}`, `Description: ${data.description}`]; }" } } } } };
+                chartInstances['roadmapChart'] = new Chart(roadmapChartCtx, chartConfig);
+
+                // Store original data for filtering
+                originalChartData['roadmapChart'] = {
+                    labels: [...chartConfig.data.labels],
+                    datasets: chartConfig.data.datasets.map(dataset => ({
+                        ...dataset,
+                        data: [...dataset.data]
+                    }))
+                };
+            }
+        } catch (error) {
+            console.error('Error initializing roadmapChart:', error);
+        }
+
+    </script>
+</body>
+
+</html>

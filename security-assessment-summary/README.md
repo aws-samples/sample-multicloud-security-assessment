@@ -6,7 +6,7 @@ Analyze **Prowler** security scan output from any supported cloud (AWS, Azure, G
 
 | Output | Description |
 |--------|-------------|
-| **HTML Dashboard** | Interactive Highcharts dashboard with KPI cards, security-score gauge, severity/service charts, findings tables, and phased remediation roadmap |
+| **HTML Dashboard** | Interactive Chart.js dashboard with KPI cards, an overall security-score badge, severity/service/checks charts, regional analysis, filterable findings tables, compliance coverage, key insights, and a phased remediation roadmap |
 | **PowerPoint Deck** | 11-slide executive presentation (16:9, neutral branding) |
 | **PDF Remediation Plan** | Phased plan: Immediate → Short-term → Medium-term → Ongoing |
 | **Terraform Scripts** | Provider-appropriate `.tf` modules (`aws` / `azurerm` / `google` / `oci`) |
@@ -73,10 +73,9 @@ See what the tool produces — these are real outputs from an anonymized AWS ass
 
 | Sample | Description |
 |--------|-------------|
-| [Security Dashboard (HTML)](samples/Sample_Security_Dashboard.html) | Interactive dashboard with KPI cards, security-score gauge, severity/service charts, findings tables, and phased remediation roadmap |
-| [Remediation Plan (PDF)](samples/Sample_Security_Remediation_Plan.pdf) | Phased remediation plan with executive summary, risk matrix, compliance gap analysis, and Terraform appendix |
+| [Security Insights Dashboard (HTML)](samples/cspm_security_scan_insights-sample.html) | Interactive Chart.js dashboard with KPI cards, an overall security-score badge, severity/service/checks charts, regional analysis, filterable findings tables, compliance coverage, key insights, and a phased remediation roadmap |
 
-> **Note**: These samples were generated from a real scan with account identifiers anonymized. Download and open locally — the HTML dashboard requires a browser, and the PDF can be viewed in any PDF reader.
+> **Note**: This sample was generated from a real scan with account identifiers anonymized. Download and open locally — the HTML dashboard requires a browser.
 
 ## Key Features
 

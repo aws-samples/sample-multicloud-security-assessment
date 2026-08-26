@@ -538,17 +538,27 @@ def parse_prowler_html(filepath: str) -> list:
 # Analysis
 # ---------------------------------------------------------------------------
 
+SEVERITY_WEIGHTS = {"critical": 10, "high": 7, "medium": 4, "low": 2, "info": 1}
+
+
 def analyze_findings(all_findings: list) -> dict:
     """Compute aggregate statistics from normalized findings, provider-aware."""
     total = len(all_findings)
     pass_count = sum(1 for f in all_findings if f.get("STATUS", "").upper().startswith("PASS"))
     fail_count = sum(1 for f in all_findings if f.get("STATUS", "").upper().startswith("FAIL"))
 
-    # Score = PASS / (PASS + FAIL). Excludes non-actionable statuses (MANUAL/INFO/MUTED)
-    # from the denominator so they don't artificially deflate the score. total_checks
-    # (reported separately) still reflects every check that ran.
+    # Security Score — weighted penalty model:
+    #   Score = 100 - (weighted_penalty / max_possible_penalty × 100)
+    # Severity weights: Critical=10, High=7, Medium=4, Low=2, Info=1.
+    # Only FAIL findings contribute to the penalty. MANUAL/INFO/MUTED excluded.
     scored = pass_count + fail_count
-    security_score = round((pass_count / scored) * 100, 1) if scored > 0 else 0.0
+    failed_findings = [f for f in all_findings if f.get("STATUS", "").upper().startswith("FAIL")]
+    max_possible = scored * SEVERITY_WEIGHTS["critical"] if scored > 0 else 1
+    weighted_penalty = sum(
+        SEVERITY_WEIGHTS.get(f.get("SEVERITY", "other").lower(), 1)
+        for f in failed_findings
+    )
+    security_score = round(100 - (weighted_penalty / max_possible * 100), 1) if scored > 0 else 0.0
 
     failed = [f for f in all_findings if f.get("STATUS", "").upper().startswith("FAIL")]
 
@@ -583,7 +593,12 @@ def analyze_findings(all_findings: list) -> dict:
             "total_checks": len(p_all),
             "pass_count": p_pass,
             "fail_count": len(p_failed),
-            "security_score": round((p_pass / (p_pass + len(p_failed))) * 100, 1) if (p_pass + len(p_failed)) > 0 else 0.0,
+            "security_score": round(
+                100 - (sum(
+                    SEVERITY_WEIGHTS.get(f.get("SEVERITY", "other").lower(), 1)
+                    for f in p_failed
+                ) / ((p_pass + len(p_failed)) * SEVERITY_WEIGHTS["critical"]) * 100), 1
+            ) if (p_pass + len(p_failed)) > 0 else 0.0,
             "findings_by_severity": {
                 "critical": p_sev.get("Critical", 0),
                 "high": p_sev.get("High", 0),
