@@ -1,0 +1,9 @@
+{
+  "name": "cloud-security-assessment-pptx",
+  "version": "1.0.0",
+  "description": "PPTX deck generator for the Cloud Security Assessment tool",
+  "private": true,
+  "dependencies": {
+    "pptxgenjs": "3.12.0"
+  }
+}

@@ -15,6 +15,7 @@
 - [Deployment](#deployment)
 - [Running Scans](#running-scans)
 - [Results and Reporting](#results-and-reporting)
+- [Security Assessment Summary](#security-assessment-summary-deliverable-generation)
 - [Ongoing Security Monitoring](#ongoing-security-monitoring)
 - [Notifications](#notifications)
 - [Cleanup / Uninstall](#cleanup--uninstall)
@@ -77,6 +78,11 @@ Pick the template for the cloud you want to scan and deploy it. To cover more th
 │   ├── oci-assessment-architecture.drawio # Editable architecture source
 │   ├── README.md                         # OCI deployment guide
 │   └── checks/                           # Prowler OCI checks listing
+├── security-assessment-summary/          # Post-scan analysis & deliverable generation
+│   ├── kiro-agent/                       # Kiro CLI agent variant
+│   ├── python-script/                    # Standalone Python/Node pipeline
+│   ├── quick-skill/                      # Amazon Quick skill variant
+│   └── README.md                         # Variant overview and quick start
 └── img/                                  # README architecture diagram exports
 ```
 
@@ -88,6 +94,7 @@ Pick the template for the cloud you want to scan and deploy it. To cover more th
 | [Azure Guide](azure/README.md) | Azure-specific deployment and configuration |
 | [GCP Guide](gcp/README.md)     | GCP-specific deployment and configuration   |
 | [OCI Guide](oci/README.md)     | OCI-specific deployment and configuration   |
+| [Security Assessment Summary](security-assessment-summary/README.md) | Post-scan analysis and deliverable generation |
 
 ## Architecture
 
@@ -321,6 +328,25 @@ aws s3 sync s3://your-bucket-name/output/ output/
 # Launch dashboard
 prowler dashboard
 ```
+
+### Security Assessment Summary (Deliverable Generation)
+
+After a scan completes, use the **Security Assessment Summary** tool to transform raw Prowler output into a full set of customer-ready deliverables: an interactive HTML dashboard, an executive PowerPoint deck, a phased PDF remediation plan, Terraform remediation modules, and a tying-it-together README.
+
+The tool supports all four clouds (AWS, Azure, GCP, OCI) and is available in three variants — pick whichever fits your workflow:
+
+| Variant | Best For |
+|---------|----------|
+| **Kiro Agent** | Interactive, conversational workflow using Kiro CLI |
+| **Python Scripts** | Standalone CLI pipeline — no AI runtime needed |
+| **Amazon Quick Skill** | Amazon Q Developer / Quick skill integration |
+
+```bash
+# Example: run the Python pipeline against your downloaded scan output
+python3 security-assessment-summary/python-script/scripts/analyze_security_data.py output/ deliverables/analysis.json --customer "My Customer" --anonymize
+```
+
+See the [Security Assessment Summary guide](security-assessment-summary/README.md) for full usage instructions and variant-specific setup.
 
 ## Ongoing Security Monitoring
 
