@@ -11,7 +11,7 @@ A Kiro CLI agent that analyzes multi-cloud **Prowler security assessment outputs
 
 | Output | Description |
 |--------|-------------|
-| HTML Dashboard | Interactive Highcharts dashboard - KPIs, gauges, charts, per-provider breakdown |
+| HTML Dashboard | Interactive Chart.js dashboard - KPIs, security-score badge, charts, regional analysis, filterable tables, roadmap |
 | PPTX Deck | Executive presentation (16:9, neutral branding) |
 | PDF Remediation Plan | Phased plan: Immediate -> Short-term -> Medium-term -> Ongoing |
 | Terraform Scripts | Provider-appropriate `.tf` (aws / azurerm / google / oci) |
@@ -88,7 +88,7 @@ The agent will ask for:
 | Script | Purpose | Language |
 |--------|---------|----------|
 | `analyze_security_data.py` | Parse multi-cloud/multi-format Prowler output, compute scores, output analysis.json | Python |
-| `generate_dashboard.py` | Interactive HTML dashboard with Highcharts | Python |
+| `generate_dashboard.py` | Interactive HTML dashboard with Chart.js | Python |
 | `generate_charts.py` | Chart PNGs (matplotlib) for PPTX embedding | Python |
 | `generate_pptx.js` | Executive PowerPoint deck (16:9) | Node.js |
 | `generate_pdf.py` | Phased remediation plan PDF (reportlab) | Python |

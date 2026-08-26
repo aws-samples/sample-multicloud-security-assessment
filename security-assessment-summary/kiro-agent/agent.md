@@ -67,7 +67,7 @@ Parse all identified files and produce structured analysis:
 - Compliance framework coverage — reported two ways: check-level counts (every CSV
   row, summed across scopes) and a requirement-level count de-duplicated by
   REQUIREMENTS_ID. A summed row count is NOT the framework's size.
-- Security score: `(pass_count / (pass_count + fail_count)) * 100` (excludes MANUAL/INFO/MUTED from denominator)
+- Security score: weighted-penalty model — `100 - (weighted_penalty / max_possible_penalty) * 100`, where each failed finding contributes its severity weight (Critical 10 / High 7 / Medium 4 / Low 2 / Info 1) and `max_possible_penalty = total_findings * 10`. Higher is better; MANUAL/INFO/MUTED are non-actionable.
 
 **REQUIRED — ask the user up front:** Should account/subscription/project/tenancy
 identifiers be anonymized in all deliverables? If yes, pass `--anonymize`, which
@@ -88,24 +88,54 @@ python3 ../python-script/scripts/analyze_security_data.py "<input_folder>" "<out
 
 ### Step 4: Generate HTML Dashboard
 
-Generate an interactive HTML dashboard with:
-1. KPI cards (Total Checks, Security Score %, Critical, High, Scopes Assessed)
-2. Security Score gauge (Highcharts solid-gauge)
-3. Findings by Severity donut chart
-4. Findings by Service bar chart (top 10)
-5. Per-Provider breakdown (when multiple clouds are present)
-6. Top Failed Checks table
-7. Compliance Framework Coverage
-8. Remediation Priority cards (Critical -> High -> Medium)
-9. Phased Remediation Roadmap
-10. Shared Responsibility reminder (provider-neutral)
+Generate an interactive, single-page HTML dashboard titled **"CSPM Security
+Insights Dashboard for <Customer>"**. It uses a fixed dark top **navbar** plus a
+collapsible left **sidebar** for navigation across these anchored sections
+(`#overview`, `#charts`, `#regions`, `#details`, `#compliance`, `#insights`,
+`#roadmap`, `#methodology`):
+
+1. **Overview** — gradient header (dark-slate → blue) with the report title, a
+   "across N <provider> <scope>s" subtitle, the scan date, and an **Overall
+   Security Score** badge (green `score-high` ≥70, yellow `score-medium` ≥40,
+   red `score-low` <40).
+2. **Global Filter** — a status dropdown (`All / Failed / Passed / Manual`,
+   `id="statusFilter"`) that live-updates the KPI cards and a filter-info alert.
+3. **KPI cards** — Critical Findings, High Findings, Total Findings, and Scopes
+   Assessed (the scope label is provider-aware, e.g. "AWS Accounts").
+4. **Charts** (four Chart.js canvases):
+   - `severityChart` — severity distribution (pie/donut: Critical/High/Medium/Low)
+   - `accountChart` — per-scope security comparison (stacked bar)
+   - `serviceChart` — service risk analysis (mixed bar + line, dual axis:
+     risk score 0-100 and failed-findings count)
+   - `checksChart` — top 10 failing checks by failure count (horizontal bar)
+5. **Regional Analysis** — `regionsChart` (stacked bar by region) plus a
+   "Top Regions by Findings" table (Region / Total / Failed / Critical / High / Risk).
+6. **Detailed Analysis** — an **Account Security Details** table (filter by
+   name/number, paginated: Account, Number, Total, Failed, Pass Rate, Critical,
+   High, Risk Score) and a **Service Vulnerability Analysis** table (filter by
+   service, paginated: Service, Total, Failed, Failure Rate, Critical, High, Risk Score).
+7. **Compliance Framework Coverage** — one card per framework with a pass-rate
+   progress bar (green ≥80%, orange ≥50%, red otherwise).
+8. **Key Insights** — dynamically generated Bootstrap alerts (critical-findings
+   callout, weak-scope callout, and an overall posture alert keyed to the score).
+9. **Improvement Roadmap** — `roadmapChart` (mixed bar + line: issues vs. effort)
+   plus three phase cards: Immediate (1-2 weeks), Short Term (1-2 months),
+   Long Term (3-6 months).
+10. **Score Methodology** — explains the Overall Security Score and Risk Score
+    formulas, the severity weights (Critical 10 / High 7 / Medium 4 / Low 2 /
+    Info 1), and the risk bands (High ≥70, Medium 40-69, Low 0-39).
 
 Run:
 ```bash
 python3 ../python-script/scripts/generate_dashboard.py "<output_dir>/analysis.json" "<output_dir>/reports/<Customer>_Security_Dashboard.html"
 ```
 
-**Use CDN Highcharts**: `https://cdn.jsdelivr.net/npm/highcharts@12.1.2/`
+**Use CDN Chart.js + Bootstrap + Font Awesome** (pin these versions **and add Subresource Integrity**):
+- `https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js`
+- `https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css` (+ bundle JS)
+- `https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css`
+
+Each CDN `<script>`/`<link>` MUST carry `integrity="sha384-..."` + `crossorigin="anonymous"` so a compromised CDN cannot inject code into a customer-facing report. The generator already emits the correct hashes for the pinned versions; if you bump a version, recompute the hash (`curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A`). For sensitive/anonymized deliverables, prefer inlining the assets (no external calls) — see Key Rule #13.
 
 ### Step 5: Generate PPTX Deck (MANDATORY - DO NOT SKIP)
 
@@ -230,14 +260,16 @@ Critical: X | High: X | Medium: X | Low: X [| Other: X when non-zero]
 2. **PPTX deck is MANDATORY** - never skip it
 3. **All output files prefixed with customer name**
 4. **IaC is Terraform only** - one uniform format, never mixed
-5. **Use CDN Highcharts** - `https://cdn.jsdelivr.net/npm/highcharts@12.1.2/`
+5. **Use CDN Chart.js + Bootstrap + Font Awesome** — Chart.js `3.9.1`, Bootstrap `5.1.3`, Font Awesome `6.0.0` (pin versions)
 6. **Neutral branding**: dark-slate header (#1F2937) + title text; no cloud vendor logos
 7. **PPTX layout**: Always `LAYOUT_16x9` (10"x5.625") - never LAYOUT_WIDE
 8. **Provider-aware**: detect providers, add per-provider breakdown, use "scope" terminology
 9. **Critical findings first** in all deliverables
-10. **Security score** = (pass_count / (pass_count + fail_count)) x 100 — MANUAL/INFO/MUTED excluded from the denominator
+10. **Security score** = weighted-penalty model: `100 - (weighted_penalty / max_possible_penalty) x 100` (severity weights Critical 10 / High 7 / Medium 4 / Low 2 / Info 1; MANUAL/INFO/MUTED are non-actionable)
 11. **Never hardcode credentials** in IaC scripts
 12. **Terraform review disclaimer** must appear in generated IaC, README, and PDF
+13. **Dashboard CDN assets use SRI** - every Chart.js/Bootstrap/Font Awesome `<script>`/`<link>` carries `integrity="sha384-..."` + `crossorigin="anonymous"`. For sensitive/anonymized deliverables, prefer inlining the assets so the report makes no external network calls (then SRI is moot)
+14. **Escape all finding-derived data in the dashboard** - HTML-escape values rendered into markup and JSON+unicode-escape (`\u003c`/`\u003e`/`\u0026`) data embedded in inline `<script>`; never build HTML from findings via `innerHTML`. Escape exactly once (the analyzer already escapes the customer name in analysis.json)
 
 ## Dependencies
 

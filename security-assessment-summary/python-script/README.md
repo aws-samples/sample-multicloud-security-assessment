@@ -33,7 +33,7 @@ cd scripts && npm install
 |--------|---------|----------|
 | `analyze_security_data.py` | Scan + parse Prowler output (CSV/OCSF/ASFF/HTML), provider-aware, → `analysis.json` | Python |
 | `generate_charts.py` | Chart PNGs (matplotlib) for the deck/PDF | Python |
-| `generate_dashboard.py` | Interactive HTML dashboard (Highcharts, neutral branding) | Python |
+| `generate_dashboard.py` | Interactive HTML dashboard (Chart.js, neutral branding) | Python |
 | `generate_pptx.js` | 11-slide PowerPoint deck (neutral branding) | Node.js |
 | `generate_pdf.py` | Phased remediation plan PDF (charts embedded) | Python |
 | `generate_iac.py` | Terraform remediation modules (provider-aware) | Python |
@@ -97,6 +97,14 @@ output/
         ├── terraform.tfvars.example           # one example tfvars for all modules
         └── <Customer>_<provider>_<remediation>.tf   # resource-only module(s)
 ```
+
+## Dashboard security
+
+The generated HTML dashboard is hardened against the usual data-driven-report risks:
+
+- **XSS-safe rendering** — all finding-derived data (check titles, service/account/region names, resource IDs, the customer name) is HTML-escaped before it goes into markup, and all data embedded in inline `<script>` (Chart.js configs, tooltip arrays) is JSON-encoded with `<`/`>`/`&` unicode-escaped so a value containing `</script>` cannot break out.
+- **Subresource Integrity (SRI)** — the Chart.js / Bootstrap / Font Awesome CDN `<script>`/`<link>` tags carry `integrity="sha384-..."` + `crossorigin="anonymous"`, so a compromised CDN cannot inject code into a customer-facing report. If you bump a pinned version, recompute the hash: `curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A`.
+- **Sensitive / anonymized deliverables** — for reports you want to be fully self-contained with **no external network calls**, vendor/inline the CSS+JS locally (for Font Awesome, also embed the woff2 fonts as base64) so nothing is fetched at open time. This closes the CDN supply-chain risk entirely; SRI is then unnecessary.
 
 ## License
 
