@@ -1,4 +1,4 @@
-# Multicloud Security Posture Assessment (MSPA) Solution
+# Multicloud Security Posture Assessment Solution
 
 [![License](https://img.shields.io/badge/License-MIT--0-blue.svg)](https://github.com/aws/mit-0)
 [![CloudFormation](https://img.shields.io/badge/CloudFormation-Templates-orange.svg)](https://aws.amazon.com/cloudformation/)
