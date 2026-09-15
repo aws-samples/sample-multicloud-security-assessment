@@ -128,17 +128,20 @@ def _compute_security_score(findings: list) -> float:
 
 
 def _compute_per_account_stats(detailed_findings: list) -> list:
-    """Group findings by account_uid and compute stats."""
+    """Group findings by normalized scope id and compute stats."""
     by_account = defaultdict(list)
     for f in detailed_findings:
-        acct = f.get("account_uid", f.get("account_id", "unknown"))
+        acct = (f.get("scope_id") or f.get("account_uid")
+                or f.get("account_id") or "unknown")
         by_account[acct].append(f)
 
     results = []
     for acct_id, findings in by_account.items():
         total = len(findings)
         failed = sum(1 for f in findings if f.get("status", "").upper() in ("FAIL", "FAILED"))
-        passed = total - failed
+        passed = sum(1 for f in findings
+                     if f.get("status", "").upper() in ("PASS", "PASSED"))
+        manual = total - failed - passed
         pass_rate = round((passed / total * 100), 1) if total > 0 else 0.0
         critical = sum(1 for f in findings if f.get("status", "").upper() in ("FAIL", "FAILED") and f.get("severity", "").lower() == "critical")
         high = sum(1 for f in findings if f.get("status", "").upper() in ("FAIL", "FAILED") and f.get("severity", "").lower() == "high")
@@ -155,6 +158,8 @@ def _compute_per_account_stats(detailed_findings: list) -> list:
             "account_name": account_name or acct_id,
             "total": total,
             "failed": failed,
+            "passed": passed,
+            "manual": manual,
             "pass_rate": pass_rate,
             "critical": critical,
             "high": high,
@@ -196,7 +201,7 @@ def _compute_per_region_stats(detailed_findings: list) -> list:
     """Group findings by region and compute stats."""
     by_region = defaultdict(list)
     for f in detailed_findings:
-        region = f.get("region", "global")
+        region = f.get("region") or "global"
         by_region[region].append(f)
 
     results = []
@@ -328,8 +333,12 @@ def generate_html(data: dict, output_path: str):
     fail_count = summary.get("fail_count", 0)
     by_service = summary.get("findings_by_service", {})
 
-    # Use detailed_findings for per-account/service/region computation
-    detailed_findings = data.get("detailed_findings", [])
+    # Detailed findings are a capped, failed-only remediation list. Dashboard
+    # metrics instead need every status and must not be capped.
+    dashboard_findings = data.get("dashboard_findings")
+    if dashboard_findings is None:
+        # Backward compatibility with analysis files generated before this field.
+        dashboard_findings = data.get("detailed_findings", [])
     top_checks = data.get("top_failed_checks", [])
     compliance = data.get("compliance_frameworks", data.get("compliance_coverage", {}))
 
@@ -338,14 +347,14 @@ def generate_html(data: dict, output_path: str):
     num_accounts = len(scopes) if scopes else 1
 
     # Compute stats
-    account_stats = _compute_per_account_stats(detailed_findings) if detailed_findings else []
-    service_stats = _compute_per_service_stats(detailed_findings) if detailed_findings else []
-    region_stats = _compute_per_region_stats(detailed_findings) if detailed_findings else []
+    account_stats = _compute_per_account_stats(dashboard_findings) if dashboard_findings else []
+    service_stats = _compute_per_service_stats(dashboard_findings) if dashboard_findings else []
+    region_stats = _compute_per_region_stats(dashboard_findings) if dashboard_findings else []
 
     # Security score (prefer pre-computed, fallback to computation)
     security_score = summary.get("security_score", 0)
-    if not security_score and detailed_findings:
-        security_score = _compute_security_score(detailed_findings)
+    if not security_score and dashboard_findings:
+        security_score = _compute_security_score(dashboard_findings)
 
     # Build roadmap
     roadmap = _build_roadmap(top_checks)
@@ -392,7 +401,17 @@ def generate_html(data: dict, output_path: str):
     parts.append(_html_main_end())
     parts.append(_html_scripts(
         severity_chart_data, account_chart_data, service_chart_data,
-        checks_chart_data, regions_chart_data, roadmap_chart_data, roadmap
+        checks_chart_data, regions_chart_data, roadmap_chart_data, roadmap,
+        {
+            "all": {"critical": critical, "high": high, "total": total_checks},
+            "Failed": {"critical": critical, "high": high, "total": fail_count},
+            "Passed": {"critical": 0, "high": 0, "total": pass_count},
+            "Manual": {
+                "critical": 0,
+                "high": 0,
+                "total": max(0, total_checks - pass_count - fail_count),
+            },
+        }
     ))
     parts.append("</body>\n</html>")
 
@@ -448,15 +467,19 @@ def _build_account_chart(account_stats: list) -> dict:
     high_data = [a["high"] for a in account_stats[:12]]
     # Estimate medium/low from failed - critical - high
     medium_data = [max(0, a["failed"] - a["critical"] - a["high"]) for a in account_stats[:12]]
+    passed_data = [a["passed"] for a in account_stats[:12]]
+    manual_data = [a["manual"] for a in account_stats[:12]]
 
     return {
         "type": "bar",
         "data": {
             "labels": labels,
             "datasets": [
-                {"label": "Critical", "data": critical_data, "backgroundColor": "#dc3545", "stack": "failures"},
-                {"label": "High", "data": high_data, "backgroundColor": "#fd7e14", "stack": "failures"},
-                {"label": "Medium/Low", "data": medium_data, "backgroundColor": "#ffc107", "stack": "failures"},
+                {"label": "Critical", "data": critical_data, "backgroundColor": "#dc3545", "stack": "findings", "status": "failed"},
+                {"label": "High", "data": high_data, "backgroundColor": "#fd7e14", "stack": "findings", "status": "failed"},
+                {"label": "Medium/Low", "data": medium_data, "backgroundColor": "#ffc107", "stack": "findings", "status": "failed"},
+                {"label": "Passed", "data": passed_data, "backgroundColor": "#28a745", "stack": "findings", "status": "passed"},
+                {"label": "Manual", "data": manual_data, "backgroundColor": "#6c757d", "stack": "findings", "status": "manual"},
             ]
         },
         "options": {
@@ -1579,7 +1602,7 @@ def _html_methodology_section() -> str:
 
 def _html_scripts(severity_data: dict, account_data: dict, service_data: dict,
                   checks_data: dict, regions_data: dict, roadmap_data: dict,
-                  roadmap: dict) -> str:
+                  roadmap: dict, status_counts: dict) -> str:
     """Generate the <script> block with all Chart.js initialization and interactivity."""
 
     charts_init = ""
@@ -1666,6 +1689,7 @@ let originalData = {{}};
 let currentFilter = 'all';
 let chartInstances = {{}};
 let originalChartData = {{}};
+const statusCounts = {_safe_json(status_counts)};
 
 // Initialize original data for filtering
 function initializeFilterData() {{
@@ -1683,32 +1707,24 @@ function applyStatusFilter() {{
     currentFilter = filter;
     const filterInfo = document.getElementById('filterInfo');
 
+    const counts = statusCounts[filter] || statusCounts.all;
+    document.getElementById('criticalCount').textContent = counts.critical;
+    document.getElementById('highCount').textContent = counts.high;
+    document.getElementById('totalCount').textContent = counts.total;
+
     if (filter === 'all') {{
-        document.getElementById('criticalCount').textContent = originalData.critical;
-        document.getElementById('highCount').textContent = originalData.high;
-        document.getElementById('totalCount').textContent = originalData.total;
         document.getElementById('totalLabel').textContent = 'Total Findings';
         filterInfo.innerHTML = '<small><strong>Current View:</strong> Showing all findings across all statuses</small>';
         filterInfo.className = 'alert alert-info mb-0';
     }} else if (filter === 'Failed') {{
-        document.getElementById('criticalCount').textContent = originalData.critical;
-        document.getElementById('highCount').textContent = originalData.high;
-        document.getElementById('totalCount').textContent = originalData.critical + originalData.high;
         document.getElementById('totalLabel').textContent = 'Failed Findings';
         filterInfo.innerHTML = '<small><strong>Current View:</strong> Showing only <span class="badge bg-danger">FAILED</span> findings</small>';
         filterInfo.className = 'alert alert-danger mb-0';
     }} else if (filter === 'Passed') {{
-        const passedFindings = originalData.total - (originalData.critical + originalData.high);
-        document.getElementById('criticalCount').textContent = '0';
-        document.getElementById('highCount').textContent = '0';
-        document.getElementById('totalCount').textContent = passedFindings;
         document.getElementById('totalLabel').textContent = 'Passed Findings';
         filterInfo.innerHTML = '<small><strong>Current View:</strong> Showing only <span class="badge bg-success">PASSED</span> findings</small>';
         filterInfo.className = 'alert alert-success mb-0';
     }} else if (filter === 'Manual') {{
-        document.getElementById('criticalCount').textContent = '0';
-        document.getElementById('highCount').textContent = '0';
-        document.getElementById('totalCount').textContent = '0';
         document.getElementById('totalLabel').textContent = 'Manual Findings';
         filterInfo.innerHTML = '<small><strong>Current View:</strong> Showing only <span class="badge bg-warning">MANUAL</span> findings</small>';
         filterInfo.className = 'alert alert-warning mb-0';
@@ -1726,17 +1742,7 @@ function updateSeverityChart(filter) {{
     let newData = [...origData.datasets[0].data];
     let newLabels = [...origData.labels];
 
-    if (filter === 'Failed') {{
-        const mediumIndex = newLabels.indexOf('Medium');
-        const lowIndex = newLabels.indexOf('Low');
-        if (mediumIndex !== -1) newData[mediumIndex] = 0;
-        if (lowIndex !== -1) newData[lowIndex] = 0;
-    }} else if (filter === 'Passed') {{
-        const criticalIndex = newLabels.indexOf('Critical');
-        const highIndex = newLabels.indexOf('High');
-        if (criticalIndex !== -1) newData[criticalIndex] = 0;
-        if (highIndex !== -1) newData[highIndex] = 0;
-    }} else if (filter === 'Manual') {{
+    if (filter === 'Passed' || filter === 'Manual') {{
         newData = newData.map(() => 0);
     }}
 
@@ -1754,9 +1760,9 @@ function updateAccountChart(filter) {{
         chart.data.datasets.forEach((dataset, index) => {{
             dataset.data = [...origData.datasets[index].data];
         }});
-    }} else if (filter === 'Failed') {{
+    }} else if (filter === 'Failed' || filter === 'Passed' || filter === 'Manual') {{
         chart.data.datasets.forEach((dataset, index) => {{
-            if (dataset.label === 'Critical' || dataset.label === 'High') {{
+            if (dataset.status === filter.toLowerCase()) {{
                 dataset.data = [...origData.datasets[index].data];
             }} else {{
                 dataset.data = origData.datasets[index].data.map(() => 0);

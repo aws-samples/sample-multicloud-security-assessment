@@ -43,11 +43,29 @@ const providers = ((data.metadata && data.metadata.providers && data.metadata.pr
 const providerLabels = providers.map((p) => PROVIDER_LABEL[p] || p.toUpperCase()).join(", ");
 const multiProvider = providers.length > 1;
 
-// Chart paths (support both new and legacy names)
+// The chart generator emits PNGs only. Rejecting every other image type before
+// PptxGenJS receives it keeps its generic image-size parser off untrusted formats.
+function assertSafePng(imagePath) {
+  const header = fs.readFileSync(imagePath);
+  const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const hasPngSignature = header.length >= 24 && header.subarray(0, 8).equals(signature);
+  const hasIhdr = hasPngSignature && header.subarray(12, 16).toString("ascii") === "IHDR";
+  const width = hasIhdr ? header.readUInt32BE(16) : 0;
+  const height = hasIhdr ? header.readUInt32BE(20) : 0;
+
+  // Generated charts are modest PNGs. Bound dimensions to avoid accepting
+  // malformed/decompression-bomb-like images under a misleading .png extension.
+  if (!hasIhdr || width === 0 || height === 0 || width > 10000 || height > 10000) {
+    throw new Error(`Refusing non-PNG or invalid chart image: ${imagePath}`);
+  }
+  return imagePath;
+}
+
+// Chart paths (support both new and legacy names).
 function chartPath(...names) {
   for (const n of names) {
     const p = path.join(chartsDir, n);
-    if (fs.existsSync(p)) return p;
+    if (fs.existsSync(p)) return assertSafePng(p);
   }
   return null;
 }

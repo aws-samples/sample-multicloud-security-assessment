@@ -94,7 +94,37 @@ PROWLER_COMPLIANCE_COLUMNS = {
 }
 
 
-def detect_scope_ids(folder_path: str) -> list:
+def _is_within(path: Path, parent: Path) -> bool:
+    """Return whether *path* is contained by *parent* after resolving both."""
+    try:
+        path.resolve().relative_to(parent.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _is_generated_output_file(filepath: Path, input_root: Path) -> bool:
+    """True for files in this tool's default assessment-summary output folders."""
+    try:
+        relative_parts = filepath.resolve().relative_to(input_root.resolve()).parts[:-1]
+    except ValueError:
+        return False
+    return any(part == "assessment-summary" or part.startswith("assessment-summary-")
+               for part in relative_parts)
+
+
+def _should_skip_file(filepath: Path, excluded_roots: list, input_root: Path,
+                      exclude_generated_outputs: bool,
+                      excluded_files: list = None) -> bool:
+    if any(filepath.resolve() == excluded.resolve()
+           for excluded in (excluded_files or [])):
+        return True
+    if any(_is_within(filepath, root) for root in excluded_roots):
+        return True
+    return exclude_generated_outputs and _is_generated_output_file(filepath, input_root)
+
+
+def detect_scope_ids(folder_path: str, excluded_roots: list = None) -> list:
     """Extract likely cloud scope IDs (accounts/subscriptions/projects/tenancies)
     from filenames. Provider-neutral: matches 12-digit AWS account IDs, GUIDs
     (Azure subscriptions), and generic project/tenancy identifiers in filenames."""
@@ -104,8 +134,10 @@ def detect_scope_ids(folder_path: str) -> list:
     # GUID-style IDs (Azure subscriptions, OCI OCIDs are longer/handled separately)
     guid = re.compile(r"\b([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
                       r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\b")
-    for f in Path(folder_path).rglob("*"):
-        if not f.is_file():
+    input_root = Path(folder_path)
+    excluded_roots = [Path(root) for root in (excluded_roots or [])]
+    for f in input_root.rglob("*"):
+        if not f.is_file() or _should_skip_file(f, excluded_roots, input_root, False):
             continue
         for m in numeric.findall(f.name):
             scope_ids.add(m)
@@ -139,8 +171,16 @@ def _is_compliance_json(filepath: Path) -> bool:
     return False
 
 
-def identify_files(folder_path: str) -> dict:
-    """Categorize files in the input folder by type."""
+def identify_files(folder_path: str, excluded_roots: list = None,
+                   exclude_generated_outputs: bool = False,
+                   excluded_files: list = None) -> dict:
+    """Categorize files in the input folder by type.
+
+    ``excluded_roots`` and ``excluded_files`` prevent generated deliverables from
+    being re-read as input.
+    ``exclude_generated_outputs`` additionally ignores prior default output folders
+    while detecting the provider for a new default output path.
+    """
     result = {
         "prowler_main_csv": [],
         "prowler_compliance_csv": [],
@@ -150,8 +190,13 @@ def identify_files(folder_path: str) -> dict:
         "other": [],
     }
 
-    for f in Path(folder_path).rglob("*"):
-        if not f.is_file():
+    input_root = Path(folder_path)
+    excluded_roots = [Path(root) for root in (excluded_roots or [])]
+    excluded_files = [Path(file_path) for file_path in (excluded_files or [])]
+    for f in input_root.rglob("*"):
+        if (not f.is_file()
+                or _should_skip_file(f, excluded_roots, input_root,
+                                     exclude_generated_outputs, excluded_files)):
             continue
         name_lower = f.name.lower()
 
@@ -239,13 +284,13 @@ def _classify_json(filepath: Path) -> str:
 #   PROVIDER, STATUS, SEVERITY, CHECK_ID, CHECK_TITLE, SERVICE_NAME,
 #   RESOURCE_UID, RISK, REMEDIATION_RECOMMENDATION_TEXT, REMEDIATION_CODE_CLI,
 #   REMEDIATION_CODE_TERRAFORM, REMEDIATION_CODE_NATIVEIAC, COMPLIANCE,
-#   CATEGORIES, SCOPE_ID
+#   CATEGORIES, SCOPE_ID, REGION
 
 NORMALIZED_KEYS = [
     "PROVIDER", "STATUS", "SEVERITY", "CHECK_ID", "CHECK_TITLE", "SERVICE_NAME",
     "RESOURCE_UID", "RISK", "REMEDIATION_RECOMMENDATION_TEXT",
     "REMEDIATION_CODE_CLI", "REMEDIATION_CODE_TERRAFORM",
-    "REMEDIATION_CODE_NATIVEIAC", "COMPLIANCE", "CATEGORIES", "SCOPE_ID",
+    "REMEDIATION_CODE_NATIVEIAC", "COMPLIANCE", "CATEGORIES", "SCOPE_ID", "REGION",
 ]
 
 
@@ -277,6 +322,8 @@ def parse_prowler_main_csv(filepath: str) -> list:
                 f["SCOPE_ID"] = (norm.get("ACCOUNT_UID") or norm.get("ACCOUNT_ID")
                                  or norm.get("SUBSCRIPTION_ID") or norm.get("PROJECT_ID")
                                  or norm.get("TENANCY_ID") or norm.get("SCOPE_ID") or "")
+                f["REGION"] = (norm.get("REGION") or norm.get("AWS_REGION")
+                               or norm.get("LOCATION") or "")
                 findings.append(f)
     except Exception as e:
         print(f"  [WARN] Failed to parse {filepath}: {e}", file=sys.stderr); _PARSE_WARNINGS.append(f"Failed to parse {filepath}: {e}")
@@ -327,6 +374,7 @@ def parse_ocsf_json(filepath: str) -> list:
 
         account = cloud.get("account", {}) if isinstance(cloud.get("account"), dict) else {}
         f["SCOPE_ID"] = str(account.get("uid", "") or account.get("name", ""))
+        f["REGION"] = str(cloud.get("region", "") or item.get("region", ""))
 
         # status_code: PASS / FAIL
         f["STATUS"] = str(item.get("status_code", item.get("status", ""))).upper()
@@ -335,9 +383,10 @@ def parse_ocsf_json(filepath: str) -> list:
         f["SEVERITY"] = str(item.get("severity", "")).capitalize()
 
         finding_info = item.get("finding_info", {}) if isinstance(item.get("finding_info"), dict) else {}
+        metadata = item.get("metadata", {}) if isinstance(item.get("metadata"), dict) else {}
         f["CHECK_ID"] = str(item.get("check_id")
-                            or finding_info.get("uid", "")
-                            or item.get("metadata", {}).get("event_code", ""))
+                            or metadata.get("event_code", "")
+                            or finding_info.get("uid", ""))
         f["CHECK_TITLE"] = str(finding_info.get("title", "") or item.get("message", ""))
 
         # resource
@@ -399,6 +448,7 @@ def parse_security_hub_json(filepath: str) -> list:
         f = _blank_finding()
         f["PROVIDER"] = "aws"  # ASFF is an AWS format
         f["SCOPE_ID"] = str(item.get("AwsAccountId", ""))
+        f["REGION"] = str(item.get("Region", "") or item.get("AwsRegion", ""))
 
         # Compliance.Status -> PASSED / FAILED
         compliance = item.get("Compliance", {}) if isinstance(item.get("Compliance"), dict) else {}
@@ -529,6 +579,7 @@ def parse_prowler_html(filepath: str) -> list:
                                                     "REMEDIATION_RECOMMENDATION_TEXT")
         f["SCOPE_ID"] = col(row, "ACCOUNT_ID", "ACCOUNT_UID", "SUBSCRIPTION",
                             "PROJECT_ID", "TENANCY")
+        f["REGION"] = col(row, "REGION", "AWS_REGION", "LOCATION")
         if f["STATUS"] or f["CHECK_ID"]:
             findings.append(f)
     return findings
@@ -539,6 +590,22 @@ def parse_prowler_html(filepath: str) -> list:
 # ---------------------------------------------------------------------------
 
 SEVERITY_WEIGHTS = {"critical": 10, "high": 7, "medium": 4, "low": 2, "info": 1}
+
+
+def _dashboard_finding(finding: dict) -> dict:
+    """Serialize the complete, compact data set used for dashboard metrics.
+
+    Detailed findings remain a capped remediation list. Dashboard calculations need
+    every status, however, so they use this non-sensitive aggregation input instead.
+    """
+    return {
+        "provider": finding.get("PROVIDER", "unknown"),
+        "status": finding.get("STATUS", ""),
+        "severity": finding.get("SEVERITY", "").capitalize(),
+        "service": finding.get("SERVICE_NAME", "") or "Unknown",
+        "scope_id": finding.get("SCOPE_ID", ""),
+        "region": finding.get("REGION", "") or "global",
+    }
 
 
 def analyze_findings(all_findings: list) -> dict:
@@ -667,6 +734,7 @@ def analyze_findings(all_findings: list) -> dict:
             "service": f.get("SERVICE_NAME", ""),
             "resource_id": f.get("RESOURCE_UID", ""),
             "scope_id": f.get("SCOPE_ID", ""),
+            "region": f.get("REGION", "") or "global",
             "risk": f.get("RISK", ""),
             "remediation_text": f.get("REMEDIATION_RECOMMENDATION_TEXT", ""),
             "remediation_cli": f.get("REMEDIATION_CODE_CLI", ""),
@@ -686,6 +754,7 @@ def analyze_findings(all_findings: list) -> dict:
         "findings_by_service": findings_by_service,
         "findings_by_provider": findings_by_provider,
         "top_failed_checks": top_failed_checks,
+        "dashboard_findings": [_dashboard_finding(f) for f in all_findings],
         "detailed_findings": detailed_findings[:500],
         "detailed_findings_truncated": len(detailed_findings) > 500,
         "detailed_findings_total": len(detailed_findings),
@@ -915,7 +984,7 @@ def main():
         sys.exit(1)
 
     # Peek the provider (cheap) so the default output folder can be named per provider.
-    _peek_files = identify_files(input_folder)
+    _peek_files = identify_files(input_folder, exclude_generated_outputs=True)
     _provider = peek_provider(_peek_files)
 
     # Resolve the output directory (user choice, else smart per-provider default).
@@ -927,16 +996,23 @@ def main():
         output_json = os.path.join(output_dir, "analysis.json")
 
     _output_json_dir = os.path.dirname(output_json)
-    if _output_json_dir:
-        os.makedirs(_output_json_dir, exist_ok=True)
     print(f"       Detected provider (for default folder): {_provider or 'unknown'}")
     print(f"       Output directory: {output_dir}")
 
     print(f"[1/4] Scanning files in: {input_folder}")
-    # Reuse the provider-peek scan — identify_files() walks the whole input tree and
-    # the folder hasn't changed since, so a second walk would be pure duplicated I/O.
-    files = _peek_files
-    scope_ids = detect_scope_ids(input_folder)
+    # An output directory nested in the input tree must never become an input source
+    # on a repeat run. This also excludes an explicitly selected analysis.json path.
+    input_root = Path(input_folder)
+    excluded_roots = [
+        path for path in (Path(output_dir), Path(_output_json_dir))
+        if _is_within(path, input_root) and path.resolve() != input_root.resolve()
+    ]
+    files = identify_files(input_folder, excluded_roots=excluded_roots,
+                           excluded_files=[Path(output_json)])
+    scope_ids = detect_scope_ids(input_folder, excluded_roots=excluded_roots)
+
+    if _output_json_dir:
+        os.makedirs(_output_json_dir, exist_ok=True)
 
     file_count = sum(len(v) for v in files.values())
     print(f"       Found {file_count} files, {len(scope_ids)} scope id(s): {scope_ids}")
@@ -1049,6 +1125,9 @@ def main():
         },
         "top_failed_checks": analysis["top_failed_checks"],
         "compliance_coverage": compliance_coverage,
+        # Complete compact input for dashboard account/service/region metrics. This
+        # intentionally includes PASS, FAIL, and manual statuses and is never capped.
+        "dashboard_findings": analysis["dashboard_findings"],
         "detailed_findings": analysis["detailed_findings"],
         # detailed_findings is capped at 500 rows; carry the flag + true count through so
         # consumers can say "showing 500 of N" instead of implying the list is complete.
