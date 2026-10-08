@@ -117,7 +117,8 @@ node ../python-script/scripts/generate_pptx.js ./output/analysis.json ./output/c
 
 # 5. Generate Terraform (provider auto-detected; override with --provider)
 #    These capability names resolve on every provider. Provider-specific extras
-#    (e.g. flow_logs, which is AWS only) are skipped with an error on other clouds.
+#    (e.g. flow_logs, which is AWS only) cause generation to fail before writing
+#    any files when selected for an unsupported provider.
 python3 ../python-script/scripts/generate_iac.py ./output/analysis.json "object_storage_public_access,identity_mfa,audit_logging,key_management" ./output/iac/
 
 # 6. Generate README
