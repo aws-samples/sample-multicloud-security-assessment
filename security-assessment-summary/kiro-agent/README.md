@@ -31,9 +31,10 @@ pip3 install matplotlib numpy reportlab
 
 ### Install Node dependencies
 
+From `security-assessment-summary/kiro-agent/`:
+
 ```bash
-cd ../python-script/scripts
-npm install
+(cd ../python-script/scripts && npm install)
 ```
 
 ## Supported Input Formats
@@ -97,7 +98,7 @@ The agent will ask for:
 
 ## Manual Usage (without the Kiro agent)
 
-You can run the scripts directly:
+From `security-assessment-summary/kiro-agent/`, run the scripts directly:
 
 ```bash
 # 1. Analyze Prowler output
@@ -112,7 +113,7 @@ python3 ../python-script/scripts/generate_dashboard.py ./output/analysis.json ".
 python3 ../python-script/scripts/generate_charts.py ./output/analysis.json ./output/charts/
 
 # 4. Generate PPTX deck
-cd ../python-script/scripts && node generate_pptx.js ../output/analysis.json ../output/charts/ "../output/reports/Acme Corp_Security_Assessment_Deck.pptx" && cd ..
+node ../python-script/scripts/generate_pptx.js ./output/analysis.json ./output/charts/ "./output/reports/Acme Corp_Security_Assessment_Deck.pptx"
 
 # 5. Generate Terraform (provider auto-detected; override with --provider)
 #    These capability names resolve on every provider. Provider-specific extras

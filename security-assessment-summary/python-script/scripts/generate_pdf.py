@@ -109,7 +109,7 @@ def build_pdf(data: dict, output_path: str, charts_dir: str = ""):
     summary = data["summary"]
     severity = summary["findings_by_severity"]
     score = summary["security_score"]
-    top_checks = data["top_failed_checks"][:20]
+    top_checks = data["top_failed_checks"]
     compliance = data.get("compliance_coverage", {})
 
     output_dir = os.path.dirname(output_path)

@@ -115,6 +115,10 @@ def _is_generated_output_file(filepath: Path, input_root: Path) -> bool:
 def _should_skip_file(filepath: Path, excluded_roots: list, input_root: Path,
                       exclude_generated_outputs: bool,
                       excluded_files: list = None) -> bool:
+    # These are this tool's own JSON artifacts, including when an earlier run
+    # placed them outside the current deliverables directory.
+    if filepath.name in {"analysis.json", "anon_map.json"}:
+        return True
     if any(filepath.resolve() == excluded.resolve()
            for excluded in (excluded_files or [])):
         return True
@@ -136,7 +140,7 @@ def detect_scope_ids(folder_path: str, excluded_roots: list = None) -> list:
     input_root = Path(folder_path)
     excluded_roots = [Path(root) for root in (excluded_roots or [])]
     for f in input_root.rglob("*"):
-        if not f.is_file() or _should_skip_file(f, excluded_roots, input_root, False):
+        if not f.is_file() or _should_skip_file(f, excluded_roots, input_root, True):
             continue
         for m in numeric.findall(f.name):
             scope_ids.add(m)
@@ -153,6 +157,8 @@ def _is_compliance_json(filepath: Path) -> bool:
     extension). Only checks the filename and immediate parent to avoid false positives
     when the full path contains 'compliance' (e.g. Acme-Compliance-2026/)."""
     name = filepath.name
+    if name.lower().endswith(".asff.json"):
+        return False
     # Check only the immediate parent directory, not the full path
     parent_name = filepath.parent.name.lower()
     if parent_name == "compliance":
@@ -222,7 +228,8 @@ def identify_files(folder_path: str, excluded_roots: list = None,
                 # fed to the CSV compliance parser (which would mis-split the JSON).
                 result["other"].append(str(f))
             else:
-                category = _classify_json(f)
+                category = ("security_hub" if name_lower.endswith(".asff.json")
+                            else _classify_json(f))
                 if category == "security_hub":
                     result["security_hub_json"].append(str(f))
                 else:
@@ -677,7 +684,8 @@ def analyze_findings(all_findings: list) -> dict:
             "scopes": p_scopes,
         }
 
-    # Top failed checks
+    # Retain top failed checks for every severity so later remediation phases
+    # are still represented when Critical findings dominate the ranking.
     check_counter = Counter()
     check_details = {}
     for f in failed:
@@ -705,7 +713,13 @@ def analyze_findings(all_findings: list) -> dict:
                     key=lambda item: (_severity_rank.get(
                         check_details[item[0]].get("severity", "").capitalize(), 99),
                         -item[1]))
-    for check_id, count in ranked[:25]:
+    per_severity_count = Counter()
+    for check_id, count in ranked:
+        severity = check_details[check_id].get("severity", "").capitalize()
+        bucket = _severity_rank.get(severity, 99)
+        if per_severity_count[bucket] >= 25:
+            continue
+        per_severity_count[bucket] += 1
         entry = dict(check_details[check_id])
         entry["count"] = count
         top_failed_checks.append(entry)
@@ -779,7 +793,9 @@ def analyze_compliance(compliance_records: list) -> dict:
     req_status = defaultdict(dict)
     scopes = defaultdict(set)
     for rec in compliance_records:
-        fw = rec.get("FRAMEWORK", "Unknown")
+        # FRAMEWORK is shared across benchmark versions (e.g. CIS); NAME
+        # identifies the versioned benchmark in Prowler's compliance export.
+        fw = rec.get("NAME") or rec.get("FRAMEWORK") or "Unknown"
         frameworks[fw]["total"] += 1
         raw_status = str(rec.get("STATUS") or "").strip().upper()
         status = {"PASSED": "PASS", "FAILED": "FAIL"}.get(raw_status, raw_status)
@@ -1008,6 +1024,7 @@ def main():
         if _is_within(path, input_root) and path.resolve() != input_root.resolve()
     ]
     files = identify_files(input_folder, excluded_roots=excluded_roots,
+                           exclude_generated_outputs=True,
                            excluded_files=[Path(output_json)])
     scope_ids = detect_scope_ids(input_folder, excluded_roots=excluded_roots)
 
@@ -1044,7 +1061,7 @@ def main():
         subdirectories are treated as separate scans (not collapsed or suppressed)."""
         rel = os.path.relpath(path, input_folder)
         b = os.path.basename(rel)
-        for ext in (".ocsf.json", ".csv", ".html", ".json"):
+        for ext in (".ocsf.json", ".asff.json", ".csv", ".html", ".json"):
             if b.lower().endswith(ext):
                 return os.path.join(os.path.dirname(rel), b[: -len(ext)])
         return os.path.join(os.path.dirname(rel), os.path.splitext(b)[0])
@@ -1154,6 +1171,11 @@ def main():
         # real account/subscription/project/tenancy IDs into the customer-facing file.)
         # The real->label mapping is written ONLY to the operator-side anon_map.json sidecar.
         output["metadata"]["scope_labels"] = sorted(mask.values())
+        leaks = verify_anonymization(output, mask)
+        if leaks:
+            print(f"ERROR: anonymization incomplete; {len(leaks)} identifier(s) "
+                  "remain in the analysis. No output was written.", file=sys.stderr)
+            sys.exit(1)
         # Write the reverse mapping to a SEPARATE operator sidecar (NOT shipped to the
         # customer) next to the output, for the operator's own de-anonymization/verification.
         # Placed in the PARENT of the output directory so it's outside the deliverables
@@ -1165,13 +1187,7 @@ def main():
         _fd = os.open(sidecar, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(_fd, "w", encoding="utf-8") as mf:
             json.dump({"real_to_label": mask}, mf, indent=2)
-        # Verify the shipped output (analysis.json content) contains NO real identifiers.
-        leaks = verify_anonymization(output, mask)
-        if leaks:
-            print(f"   WARNING: anonymization incomplete, {len(leaks)} identifier(s) still present: {leaks}",
-                  file=sys.stderr)
-        else:
-            print(f"   Anonymization applied and verified: {len(mask)} scope id(s) masked, 0 leaks.")
+        print(f"   Anonymization applied and verified: {len(mask)} scope id(s) masked, 0 leaks.")
 
     with open(output_json, "w", encoding="utf-8") as fh:
         json.dump(output, fh, indent=2, default=str)

@@ -493,13 +493,29 @@ PROVIDER_VARIABLES = {
 }
 
 
+def _hcl_string_literal(value: str) -> str:
+    """Quote text as a literal Terraform string, including template markers."""
+    escapes = {'"': '\\"', "\\": "\\\\", "\n": "\\n", "\r": "\\r", "\t": "\\t"}
+    escaped = []
+    for char in value:
+        codepoint = ord(char)
+        if char in escapes:
+            escaped.append(escapes[char])
+        elif codepoint < 32 or 127 <= codepoint <= 159:
+            escaped.append(f"\\u{codepoint:04x}")
+        else:
+            escaped.append(char)
+    text = "".join(escaped)
+    return '"' + text.replace("${", "$${").replace("%{", "%%{") + '"'
+
+
 def _hcl_default(value):
     """Render a Python default as an HCL literal for a variable default."""
     if value is None:
         return None  # required variable, no default
     if isinstance(value, list):
-        return "[]" if not value else "[" + ", ".join(f'"{v}"' for v in value) + "]"
-    return f'"{value}"'
+        return "[]" if not value else "[" + ", ".join(_hcl_string_literal(v) for v in value) + "]"
+    return _hcl_string_literal(value)
 
 
 def _selected_variables(provider: str, terraform_parts: list) -> set:
@@ -550,14 +566,14 @@ def _render_tfvars_example(provider: str, customer: str, selected_variables: set
     if "environment" in selected_variables:
         lines.append('environment = "production"')
     if "name_prefix" in selected_variables:
-        lines.append(f'name_prefix = "{customer.lower().replace(" ", "-")}"')
+        lines.append(f'name_prefix = {_hcl_string_literal(customer.lower().replace(" ", "-"))}')
     for name, (vtype, default, desc) in PROVIDER_VARIABLES.get(provider, {}).items():
         if name not in selected_variables:
             continue
         if vtype.startswith("list"):
             example = "[]"
         else:
-            example = f'"{default}"' if default else '"REPLACE_ME"'
+            example = _hcl_string_literal(default) if default else '"REPLACE_ME"'
         marker = "" if default not in (None, "") else "   # REQUIRED"
         lines.append(f'{name} = {example}{marker}')
     return "\n".join(lines) + "\n"
@@ -580,15 +596,13 @@ def _render_locals_tf(customer: str, provider: str) -> str:
         )
 
     key = "tags"
-    # Escape customer name for safe HCL embedding (quotes, backslashes, dollar signs)
-    safe_customer = customer.replace("\\", "\\\\").replace('"', '\\"').replace("$", "$$")
     return (
         "# Shared tags/labels applied by the remediation modules.\n"
         f'locals {{\n  {key} = {{\n'
         f'    Environment = var.environment\n'
         f'    ManagedBy   = "Terraform"\n'
         f'    Purpose     = "SecurityRemediation"\n'
-        f'    Customer    = "{safe_customer}"\n'
+        f'    Customer    = {_hcl_string_literal(customer)}\n'
         f'  }}\n}}\n'
     )
 
@@ -707,7 +721,7 @@ def generate_terraform(customer: str, provider: str, selections: list, output_di
     for sel in valid:
         entry = catalog[sel]
         content = (
-            f"# {customer} — {entry['title']}\n"
+            f"# {_hcl_string_literal(customer)[1:-1]} — {entry['title']}\n"
             f"# {entry['description']}\n"
             f"# Variables are declared in variables.tf; providers/locals are shared.\n"
             f"#\n"
