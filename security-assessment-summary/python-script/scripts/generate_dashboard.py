@@ -1039,7 +1039,7 @@ def _html_overview(customer: str, scan_date: str, num_accounts: int,
     <div class="col-12">
         <div class="dashboard-header">
             <h1 class="display-4">CSPM Security Insights Dashboard for {customer}</h1>
-            <p class="lead">Security Insights from the Prowler Scans for {customer} across {num_accounts} {_esc(provider_str)} {scope_word}s</p>
+            <p class="lead">Security Insights from the Prowler Scans for {customer} across {num_accounts} {_esc(provider_str)} {_esc(scope_word)}s</p>
             <div class="d-flex justify-content-between align-items-center flex-wrap">
                 <span class="generation-time">Generated: {_esc(scan_date)}</span>
                 <div class="security-score d-flex align-items-center">
@@ -1354,8 +1354,19 @@ def _html_compliance_section(compliance: dict) -> str:
         if isinstance(info, dict):
             total = info.get("total", 0)
             passed = info.get("pass", info.get("passed", 0))
-            rate = info.get("pass_rate", round((passed / total * 100), 1) if total > 0 else 0)
-            color = "#28a745" if rate >= 80 else "#fd7e14" if rate >= 50 else "#dc3545"
+            rate = info.get("pass_rate")
+            if rate is None:
+                rate = round((passed / total * 100), 1) if total > 0 else 0
+            try:
+                numeric_rate = float(rate)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("Compliance pass rate must be numeric") from exc
+            if not math.isfinite(numeric_rate):
+                raise ValueError("Compliance pass rate must be finite")
+            if not 0 <= numeric_rate <= 100:
+                raise ValueError("Compliance pass rate must be between 0 and 100")
+            color = ("#28a745" if numeric_rate >= 80 else
+                     "#fd7e14" if numeric_rate >= 50 else "#dc3545")
             req_total = info.get("requirements_total")
             if req_total:
                 req_passed = info.get("requirements_passed", 0)
@@ -1376,7 +1387,7 @@ def _html_compliance_section(compliance: dict) -> str:
                             <div class="small text-muted">Total Checks: {_esc(total)} · {_esc(passed)} passed ({_esc(rate)}%)</div>
                             {req_line}
                             <div class="progress" style="height: 8px;">
-                                <div class="progress-bar" style="width: {rate}%; background-color: {color};"></div>
+                                <div class="progress-bar" style="width: {numeric_rate:g}%; background-color: {color};"></div>
                             </div>
                         </div>
                     </div>

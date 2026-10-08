@@ -92,10 +92,10 @@ output/
 ├── <Customer>_Security_Remediation_Plan.pdf
 └── iac/
     ├── providers.tf                       # shared provider + terraform block
-        ├── variables.tf                       # all variable declarations (shared)
-        ├── locals.tf                          # shared tags/labels
-        ├── terraform.tfvars.example           # one example tfvars for all modules
-        └── <Customer>_<provider>_<remediation>.tf   # resource-only module(s)
+    ├── variables.tf                       # all variable declarations (shared)
+    ├── locals.tf                          # shared tags/labels
+    ├── terraform.tfvars.example           # one example tfvars for all modules
+    └── <Customer>_<provider>_<remediation>.tf   # resource-only module(s)
 ```
 
 ## Dashboard security

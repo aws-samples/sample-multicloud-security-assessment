@@ -144,8 +144,8 @@ python3 ../python-script/scripts/generate_pdf.py ./output/analysis.json "./outpu
 - Neutral branding: dark-slate header (#1F2937), no cloud vendor logos
 - IaC is **Terraform only** (aws / azurerm / google / oci)
 - Provider-aware: detects AWS / Azure / GCP / OCI and adds a per-provider breakdown
-- All output files are prefixed with the customer name
-- All deliverables go under a single top-level `output/` directory
+- Customer-facing report filenames include the customer name
+- The manual commands above use `./output/`; the agent defaults to `assessment-summary-<provider>/` unless you choose another folder
 
 ## License
 

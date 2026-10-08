@@ -101,6 +101,33 @@ class AnalyzerRegressionTests(unittest.TestCase):
 
 
 class DashboardRegressionTests(unittest.TestCase):
+    def test_scope_term_is_escaped_and_compliance_width_is_numeric(self):
+        scope_term = 'scope"><img src=x onerror=alert(1)>'
+        data = {
+            "metadata": {"scope_term": scope_term},
+            "summary": {
+                "total_checks": 0, "pass_count": 0, "fail_count": 0,
+                "findings_by_severity": {}, "findings_by_service": {},
+            },
+            "compliance_coverage": {
+                "CIS": {"total": 2, "pass": 1, "pass_rate": "50.0"},
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "dashboard.html"
+            dashboard.generate_html(data, str(output_path))
+            rendered = output_path.read_text(encoding="utf-8")
+            self.assertNotIn(scope_term, rendered)
+            self.assertIn("scope&quot;&gt;&lt;img", rendered)
+            self.assertIn('style="width: 50%; background-color:', rendered)
+
+            data["compliance_coverage"]["CIS"]["pass_rate"] = "50%; color: red"
+            invalid_output = Path(temp_dir) / "invalid.html"
+            with self.assertRaisesRegex(ValueError, "Compliance pass rate must be numeric"):
+                dashboard.generate_html(data, str(invalid_output))
+            self.assertFalse(invalid_output.exists())
+
     def test_compliance_card_shows_check_and_requirement_denominators(self):
         coverage = analyzer.analyze_compliance([
             {"NAME": "CIS AWS v4.0.1", "REQUIREMENTS_ID": "1.1",
