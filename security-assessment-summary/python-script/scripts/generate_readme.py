@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
 """
 generate_readme.py — Generate a customer README tying all deliverables together.
 
@@ -14,6 +17,31 @@ import json
 import os
 import sys
 from providers import PROVIDER_LABELS as PROVIDER_LABEL, PROVIDER_SCOPE_TERM as SCOPE_TERM, PROVIDER_CLI
+import safe_io
+
+
+def _md(value) -> str:
+    """Escape an untrusted (scan-derived) value for safe inclusion in Markdown.
+
+    Scan data (service names, scope ids, customer name, framework names) is untrusted:
+    a value containing a pipe would break out of a Markdown table cell, and raw HTML
+    (`<img onerror=...>`, `<script>`) would execute when the Markdown is rendered to
+    HTML. We therefore:
+      * escape HTML metacharacters (& < > ") so no raw HTML/script survives rendering,
+      * escape Markdown table/structural metacharacters (| ` * _ [ ] and newlines) so
+        the value stays confined to its cell and can't inject markup.
+    """
+    text = str(value)
+    # HTML metacharacters first (so we don't double-escape the & we introduce).
+    text = (text.replace("&", "&amp;").replace("<", "&lt;")
+                .replace(">", "&gt;").replace('"', "&quot;"))
+    # Markdown structural metacharacters.
+    text = text.replace("\\", "\\\\")
+    for ch in ("|", "`", "*", "_", "[", "]", "{", "}", "#"):
+        text = text.replace(ch, "\\" + ch)
+    # Collapse newlines/CRs so a value can't start a new table row or break layout.
+    text = text.replace("\r", " ").replace("\n", " ")
+    return text
 
 
 def load_analysis(path: str) -> dict:
@@ -42,13 +70,17 @@ def generate_readme(data: dict, output_path: str):
     by_service = summary["findings_by_service"]
     compliance = data.get("compliance_coverage", {})
     scope_term = _scope_term(providers)
-    scope_str = ", ".join(scopes) if scopes else "N/A"
+    # Scan-derived display values are escaped for Markdown/HTML to prevent table-cell
+    # breakout and HTML/script injection when the README is rendered.
+    customer_md = _md(customer)
+    provider_labels_md = ", ".join(_md(p) for p in provider_labels)
+    scope_str = ", ".join(_md(s) for s in scopes) if scopes else "N/A"
     clis = " / ".join(sorted({PROVIDER_CLI.get(p, p) for p in providers}))
 
     s = []
-    s.append(f"# {customer} — Cloud Security Assessment\n")
+    s.append(f"# {customer_md} — Cloud Security Assessment\n")
     s.append(f"**Assessment Date:** {scan_date}  ")
-    s.append(f"**Cloud Provider(s):** {', '.join(provider_labels)}  ")
+    s.append(f"**Cloud Provider(s):** {provider_labels_md}  ")
     s.append(f"**{scope_term.capitalize()}(s) Assessed:** {scope_str}  ")
     s.append(f"**Security Score:** {score}%  ")
     _other_str = f" | **Other:** {severity['other']}" if severity.get("other") else ""
@@ -59,15 +91,15 @@ def generate_readme(data: dict, output_path: str):
     s.append(
         f"This package contains the results of a cloud security assessment performed on {scan_date}. "
         f"It evaluated {summary['total_checks']:,} security checks across {len(scopes)} "
-        f"{scope_term}(s) on {', '.join(provider_labels)} using Prowler, achieving a security score of **{score}%**.\n"
+        f"{scope_term}(s) on {provider_labels_md} using Prowler, achieving a security score of **{score}%**.\n"
     )
     s.append("### Deliverables\n")
     s.append("| File | Description |")
     s.append("|------|-------------|")
-    s.append(f"| `reports/{customer}_Security_Dashboard.html` | Interactive security dashboard (open in browser) |")
-    s.append(f"| `reports/{customer}_Security_Assessment_Deck.pptx` | Executive presentation (11 slides) |")
-    s.append(f"| `{customer}_Security_Remediation_Plan.pdf` | Phased remediation plan |")
-    s.append(f"| `{customer}_README.md` | This file |")
+    s.append(f"| `reports/{customer_md}_Security_Dashboard.html` | Interactive security dashboard (open in browser) |")
+    s.append(f"| `reports/{customer_md}_Security_Assessment_Deck.pptx` | Executive presentation (11 slides) |")
+    s.append(f"| `{customer_md}_Security_Remediation_Plan.pdf` | Phased remediation plan |")
+    s.append(f"| `{customer_md}_README.md` | This file |")
     s.append("| `iac/` | Terraform remediation modules |")
     s.append("")
 
@@ -104,7 +136,7 @@ def generate_readme(data: dict, output_path: str):
         s.append("| Provider | Checks | Failed | Score |")
         s.append("|----------|--------|--------|-------|")
         for pk, pv in data["summary"]["findings_by_provider"].items():
-            s.append(f"| {pv.get('label', pk)} | {pv.get('total_checks','-')} | "
+            s.append(f"| {_md(pv.get('label', pk))} | {pv.get('total_checks','-')} | "
                      f"{pv.get('fail_count','-')} | {pv.get('security_score','-')}% |")
         s.append("")
 
@@ -112,7 +144,7 @@ def generate_readme(data: dict, output_path: str):
     s.append("| Service | Failed Checks |")
     s.append("|---------|---------------|")
     for svc, count in list(by_service.items())[:10]:
-        s.append(f"| {svc} | {count} |")
+        s.append(f"| {_md(svc)} | {count} |")
     s.append("")
 
     if compliance:
@@ -124,7 +156,7 @@ def generate_readme(data: dict, output_path: str):
         for fw, info in compliance.items():
             _req = (f"{info.get('requirements_passed', 0)} / {info['requirements_total']} "
                     f"({info.get('requirements_pass_rate', 0)}%)") if info.get("requirements_total") else "—"
-            s.append(f"| {fw} | {info['pass_rate']}% | {info['pass']} | {info['fail']} | {info['total']} | {_req} |")
+            s.append(f"| {_md(fw)} | {info['pass_rate']}% | {info['pass']} | {info['fail']} | {info['total']} | {_req} |")
         s.append("")
 
     s.append("## Remediation Modules (Terraform)\n")
@@ -174,7 +206,7 @@ def generate_readme(data: dict, output_path: str):
     output_dir = os.path.dirname(output_path)
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as fh:
+    with safe_io.open_write_nofollow(output_path, root=(output_dir or ".")) as fh:
         fh.write("\n".join(s))
     print(f"✅ README generated → {output_path}")
 

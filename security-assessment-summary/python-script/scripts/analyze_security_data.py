@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
 """
 analyze_security_data.py - Scan, parse, and analyze multi-cloud Prowler security
 assessment outputs (AWS, Azure, GCP, OCI).
@@ -27,17 +30,47 @@ from datetime import datetime
 from html.parser import HTMLParser
 from pathlib import Path
 from providers import PROVIDER_LABELS, PROVIDER_SCOPE_TERM
+import safe_io
 
+# ---------------------------------------------------------------------------
+# Parser resource limits
+# ---------------------------------------------------------------------------
 # Prowler REMEDIATION_CODE_* / RISK / DESCRIPTION fields can exceed Python's default
-# CSV field limit (131,072 chars). Without this, csv.reader raises "field larger than
-# field limit" and an entire file's findings would be silently dropped. Bump to the
-# platform max (with a fallback for platforms where sys.maxsize overflows a C long).
+# CSV field limit (131,072 chars). We raise the limit so a legitimately large field
+# doesn't drop a file's findings — but to a BOUNDED value, not sys.maxsize, so a
+# hostile input can't drive unbounded memory use (DoS). The caps below also bound the
+# per-file size we are willing to read.
+MAX_FIELD_BYTES = 16 * 1024 * 1024          # 16 MiB per CSV field (generous for Prowler)
+MAX_FILE_BYTES = 512 * 1024 * 1024          # 512 MiB per input file
+MAX_JSON_FILE_BYTES = 256 * 1024 * 1024     # 256 MiB per JSON file (fully loaded into memory)
+
+# Aggregate (whole-job) limits — bound total work so a hostile input tree can't exhaust
+# memory/time even when every individual file is under the per-file caps above.
+MAX_TOTAL_FILES = 10_000                     # max files discovered/categorized in one run
+MAX_RECURSION_DEPTH = 32                     # max directory depth below the input root
+MAX_TOTAL_RECORDS = 5_000_000               # max normalized findings aggregated per run
+
 try:
-    csv.field_size_limit(sys.maxsize)
+    csv.field_size_limit(MAX_FIELD_BYTES)
 except OverflowError:
-    # Some 32-bit / Windows builds reject sys.maxsize; fall back to the largest
-    # value that is universally accepted.
-    csv.field_size_limit(min(sys.maxsize, 2**31 - 1))
+    # Some 32-bit / Windows builds reject large values; fall back to the C-long max.
+    csv.field_size_limit(min(MAX_FIELD_BYTES, 2**31 - 1))
+
+
+def _file_too_large(filepath, limit_bytes: int) -> bool:
+    """Return True (and log) if filepath exceeds limit_bytes. Fail safe: on stat error,
+    treat as not-too-large so a transient error doesn't silently drop a file."""
+    try:
+        size = os.path.getsize(filepath)
+    except OSError:
+        return False
+    if size > limit_bytes:
+        print(f"  [WARN] Skipping {filepath}: {size} bytes exceeds limit "
+              f"({limit_bytes} bytes).", file=sys.stderr)
+        _PARSE_WARNINGS.append(f"Skipped oversized file {filepath} ({size} bytes)")
+        return True
+    return False
+
 
 # Collects errors from selected inputs so main() can reject incomplete analyses.
 _PARSE_WARNINGS = []
@@ -140,6 +173,10 @@ def detect_scope_ids(folder_path: str, excluded_roots: list = None) -> list:
     input_root = Path(folder_path)
     excluded_roots = [Path(root) for root in (excluded_roots or [])]
     for f in input_root.rglob("*"):
+        # Skip symlinks (consistent with identify_files) so a symlinked path can't
+        # smuggle scope ids via its name from outside the input tree.
+        if f.is_symlink():
+            continue
         if not f.is_file() or _should_skip_file(f, excluded_roots, input_root, True):
             continue
         for m in numeric.findall(f.name):
@@ -198,11 +235,48 @@ def identify_files(folder_path: str, excluded_roots: list = None,
     input_root = Path(folder_path)
     excluded_roots = [Path(root) for root in (excluded_roots or [])]
     excluded_files = [Path(file_path) for file_path in (excluded_files or [])]
+    # Resolve the input root once so we can confirm every discovered file stays inside
+    # it. rglob + is_file() follow symlinks, so without this a symlink planted in a
+    # shared input directory could point at /etc/passwd or another customer's data and
+    # turn this tool into a confused-deputy reader.
+    try:
+        input_root_resolved = input_root.resolve()
+    except OSError:
+        input_root_resolved = input_root
+    _files_seen = 0
     for f in input_root.rglob("*"):
+        # Security: skip symlinks outright, and skip anything whose real path escapes
+        # the input root (defends against symlinked files and symlinked parent dirs).
+        try:
+            if f.is_symlink():
+                print(f"  [WARN] Skipping symlinked path (not followed): {f}", file=sys.stderr)
+                continue
+            f_resolved = f.resolve()
+            f_resolved.relative_to(input_root_resolved)
+        except (OSError, ValueError):
+            print(f"  [WARN] Skipping path outside input root: {f}", file=sys.stderr)
+            continue
+        # Bound recursion depth: ignore anything nested deeper than MAX_RECURSION_DEPTH
+        # directories below the input root (defends against pathological deep trees).
+        try:
+            depth = len(f.relative_to(input_root).parts)
+        except ValueError:
+            depth = MAX_RECURSION_DEPTH + 1
+        if depth > MAX_RECURSION_DEPTH:
+            print(f"  [WARN] Skipping path deeper than {MAX_RECURSION_DEPTH} levels: {f}",
+                  file=sys.stderr)
+            continue
         if (not f.is_file()
                 or _should_skip_file(f, excluded_roots, input_root,
                                      exclude_generated_outputs, excluded_files)):
             continue
+        # Bound the total number of files categorized in one run.
+        _files_seen += 1
+        if _files_seen > MAX_TOTAL_FILES:
+            print(f"  [WARN] Reached file limit ({MAX_TOTAL_FILES}); ignoring additional "
+                  "input files. Narrow the input folder or split the run.", file=sys.stderr)
+            _PARSE_WARNINGS.append(f"Input exceeded {MAX_TOTAL_FILES}-file limit; truncated")
+            break
         name_lower = f.name.lower()
 
         if name_lower.endswith(".csv"):
@@ -261,8 +335,10 @@ def _classify_csv(filepath: Path) -> str:
         # customer folder like Acme-Compliance-2026/ doesn't misclassify every CSV.
         if filepath.parent.name.lower() == "compliance":
             return "compliance"
-    except Exception:
-        pass
+    except Exception as e:
+        # Unreadable/malformed CSV header: fall back to "other" so one bad file does
+        # not abort the run, but log why for debugging instead of silently swallowing.
+        print(f"  [DEBUG] Could not classify CSV {filepath}: {e}", file=sys.stderr)
     return "other"
 
 
@@ -277,8 +353,10 @@ def _classify_json(filepath: Path) -> str:
             return "security_hub"
         if '"Findings"' in start and '"AwsAccountId"' in start:
             return "security_hub"
-    except Exception:
-        pass
+    except Exception as e:
+        # Unreadable/malformed JSON preview: fall back to "prowler" (the default OCSF
+        # format) so one bad file does not abort the run; log why for debugging.
+        print(f"  [DEBUG] Could not classify JSON {filepath}: {e}", file=sys.stderr)
     return "prowler"
 
 
@@ -311,6 +389,8 @@ def _blank_finding() -> dict:
 def parse_prowler_main_csv(filepath: str) -> list:
     """Parse a Prowler main CSV (semicolon-delimited) into normalized findings."""
     findings = []
+    if _file_too_large(filepath, MAX_FILE_BYTES):
+        return findings
     try:
         with open(filepath, "r", encoding="utf-8", errors="replace") as fh:
             reader = csv.DictReader(fh, delimiter=";")
@@ -339,6 +419,8 @@ def parse_prowler_main_csv(filepath: str) -> list:
 def parse_prowler_compliance_csv(filepath: str) -> list:
     """Parse a Prowler compliance CSV (semicolon-delimited)."""
     records = []
+    if _file_too_large(filepath, MAX_FILE_BYTES):
+        return records
     try:
         with open(filepath, "r", encoding="utf-8", errors="replace") as fh:
             reader = csv.DictReader(fh, delimiter=";")
@@ -361,6 +443,8 @@ def parse_ocsf_json(filepath: str) -> list:
     OCSF findings carry provider under cloud.provider and severity as a string.
     """
     findings = []
+    if _file_too_large(filepath, MAX_JSON_FILE_BYTES):
+        return findings
     try:
         with open(filepath, "r", encoding="utf-8", errors="replace") as fh:
             data = json.load(fh)
@@ -438,6 +522,8 @@ def parse_security_hub_json(filepath: str) -> list:
     bare list of ASFF finding objects.
     """
     findings = []
+    if _file_too_large(filepath, MAX_JSON_FILE_BYTES):
+        return findings
     try:
         with open(filepath, "r", encoding="utf-8", errors="replace") as fh:
             data = json.load(fh)
@@ -540,6 +626,8 @@ def parse_prowler_html(filepath: str) -> list:
     schema. Provider is inferred from column content or defaults to unknown.
     """
     findings = []
+    if _file_too_large(filepath, MAX_FILE_BYTES):
+        return findings
     try:
         with open(filepath, "r", encoding="utf-8", errors="replace") as fh:
             html = fh.read()
@@ -931,8 +1019,11 @@ def peek_provider(files: dict) -> str:
                 p = normalize_provider(val)
                 if p != "unknown":
                     return p
-        except Exception:
-            pass
+        except Exception as e:
+            # Can't read this CSV's header for a quick provider peek — try the next
+            # candidate file rather than failing; log why for debugging.
+            print(f"  [DEBUG] Provider peek failed for CSV {csv_path}: {e}", file=sys.stderr)
+            continue
     # Fall back to OCSF JSON (cloud.provider).
     for json_path in files.get("prowler_json", []):
         try:
@@ -943,8 +1034,11 @@ def peek_provider(files: dict) -> str:
                 p = normalize_provider(m.group(1))
                 if p != "unknown":
                     return p
-        except Exception:
-            pass
+        except Exception as e:
+            # Can't read this JSON's preview for a provider peek — try the next
+            # candidate file rather than failing; log why for debugging.
+            print(f"  [DEBUG] Provider peek failed for JSON {json_path}: {e}", file=sys.stderr)
+            continue
     # Security Hub / ASFF is AWS.
     if files.get("security_hub_json"):
         return "aws"
@@ -990,6 +1084,16 @@ def main():
     parser.add_argument("--anonymize", action="store_true",
                         help="Replace real account/subscription/project/tenancy identifiers "
                              "with generic labels (Scope A, Scope B, ...) across all output.")
+    parser.add_argument("--debug-metadata", action="store_true",
+                        help="Operator-only: include the full absolute input-folder path in "
+                             "the analysis metadata. OFF by default so the customer-facing "
+                             "analysis.json does not leak host-specific/operator paths.")
+    parser.add_argument("--anon-map-dir", default=None,
+                        help="Operator-only directory for the de-anonymization key "
+                             "(anon_map). Defaults to ~/.cloud-security-assessment/anon-maps/. "
+                             "The key is NEVER written into the deliverables folder, and each "
+                             "run gets a provider+timestamp-stamped filename so runs don't "
+                             "overwrite each other.")
     args = parser.parse_args()
     _PARSE_WARNINGS.clear()
 
@@ -1089,6 +1193,18 @@ def main():
             recs = _parsers[chosen_fmt](path)
             all_findings.extend(recs)
             print(f"       [{_labels[chosen_fmt]}] {os.path.basename(path)} -> {len(recs)} records{note}")
+            # Bound aggregate memory: stop accumulating once the total-record cap is hit
+            # so a hostile set of individually-valid files can't exhaust memory in sum.
+            if len(all_findings) > MAX_TOTAL_RECORDS:
+                print(f"  [WARN] Reached record limit ({MAX_TOTAL_RECORDS}); truncating "
+                      "aggregated findings. Results are partial.", file=sys.stderr)
+                _PARSE_WARNINGS.append(
+                    f"Aggregated findings exceeded {MAX_TOTAL_RECORDS}-record limit; truncated")
+                del all_findings[MAX_TOTAL_RECORDS:]
+                break
+        else:
+            continue
+        break
 
     provs = sorted({(f.get("PROVIDER") or "unknown").lower() for f in all_findings})
     print(f"       {len(all_findings)} findings across {len(groups)} scan group(s); provider(s): {', '.join(provs) or 'none'}")
@@ -1100,6 +1216,14 @@ def main():
         records = parse_prowler_compliance_csv(csv_path)
         all_compliance.extend(records)
         print(f"         -> {len(records)} records")
+        # Bound aggregate compliance memory the same way as findings.
+        if len(all_compliance) > MAX_TOTAL_RECORDS:
+            print(f"  [WARN] Reached compliance record limit ({MAX_TOTAL_RECORDS}); "
+                  "truncating. Compliance coverage is partial.", file=sys.stderr)
+            _PARSE_WARNINGS.append(
+                f"Compliance records exceeded {MAX_TOTAL_RECORDS}-record limit; truncated")
+            del all_compliance[MAX_TOTAL_RECORDS:]
+            break
 
     if _PARSE_WARNINGS:
         print(f"ERROR: {len(_PARSE_WARNINGS)} selected input file(s) could not be "
@@ -1133,7 +1257,12 @@ def main():
             "provider_labels": provider_labels,
             "scope_term": scope_term,
             "scopes_assessed": effective_scopes,
-            "input_folder": input_folder,
+            # Do NOT leak the operator's absolute input path into the customer-facing
+            # analysis.json by default — it can reveal host usernames, client names, and
+            # directory layout. Store only the basename unless the operator explicitly
+            # opts in with --debug-metadata. (The --anonymize path redacts this fully.)
+            "input_folder": (input_folder if args.debug_metadata
+                             else os.path.basename(os.path.normpath(input_folder))),
             "files_processed": {k: len(v) for k, v in files.items()},
         },
         "summary": {
@@ -1176,20 +1305,54 @@ def main():
             print(f"ERROR: anonymization incomplete; {len(leaks)} identifier(s) "
                   "remain in the analysis. No output was written.", file=sys.stderr)
             sys.exit(1)
-        # Write the reverse mapping to a SEPARATE operator sidecar (NOT shipped to the
-        # customer) next to the output, for the operator's own de-anonymization/verification.
-        # Placed in the PARENT of the output directory so it's outside the deliverables
-        # folder that gets zipped and sent to the customer.
-        _output_parent = os.path.dirname(os.path.dirname(output_json)) or "."
-        sidecar = os.path.join(_output_parent, "anon_map.json")
+        # Write the real->label mapping to an OPERATOR-ONLY location, never inside the
+        # deliverables tree (sharing that folder must not hand over the de-anonymization
+        # key). Default to ~/.cloud-security-assessment/anon-maps/; override with
+        # --anon-map-dir. Each run gets a provider+timestamp-stamped filename so a second
+        # provider run does not overwrite the first run's key.
+        _anon_map_dir = (args.anon_map_dir
+                         or os.path.join(os.path.expanduser("~"),
+                                         ".cloud-security-assessment", "anon-maps"))
+        try:
+            os.makedirs(_anon_map_dir, mode=0o700, exist_ok=True)
+            os.chmod(_anon_map_dir, 0o700)  # tighten if it pre-existed with looser perms
+        except OSError as e:
+            print(f"ERROR: cannot create operator anon-map directory {_anon_map_dir}: {e}",
+                  file=sys.stderr)
+            sys.exit(1)
+        _prov_tag = (providers[0] if providers else "unknown")
+        _stamp = datetime.now().strftime("%Y%m%dT%H%M%S_%f")
+        sidecar = os.path.join(_anon_map_dir, f"anon_map_{_prov_tag}_{_stamp}_{os.getpid()}.json")
         # Write the real->label mapping with owner-only (0o600) permissions — on shared
         # systems this prevents other users from reading the exact de-anonymization map.
-        _fd = os.open(sidecar, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        # O_NOFOLLOW: refuse to follow a symlink at the sidecar path, so an attacker who
+        # pre-plants a symlink there cannot redirect this (truncating) write elsewhere.
+        _open_flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            _fd = os.open(sidecar, _open_flags, 0o600)
+        except OSError as e:
+            print(f"ERROR: refusing to write anonymization sidecar at {sidecar}: {e} "
+                  "(a symlink or unwritable path may be present). No sidecar written.",
+                  file=sys.stderr)
+            sys.exit(1)
+        # The mode arg to os.open only applies when CREATING the file. If the file already
+        # existed (e.g. world-readable from a prior run or another tool), tighten it to
+        # owner-only now so the de-anonymization map can't be read by other users.
+        try:
+            os.fchmod(_fd, 0o600)
+        except OSError:
+            pass  # best-effort on platforms/filesystems without fchmod
         with os.fdopen(_fd, "w", encoding="utf-8") as mf:
             json.dump({"real_to_label": mask}, mf, indent=2)
-        print(f"   Anonymization applied and verified: {len(mask)} scope id(s) masked, 0 leaks.")
+        print(f"   De-anonymization key (operator-only, NOT a deliverable): {sidecar}")
+        print(f"   Anonymization: {len(mask)} scope id(s) (account/subscription/project/"
+              f"tenancy) masked and verified absent from all output.")
+        print("   NOTE: only scope identifiers are masked. Principal names, emails, "
+              "resource names, IPs, and other identifiers in free text are NOT masked — "
+              "review deliverables before sharing.")
 
-    with open(output_json, "w", encoding="utf-8") as fh:
+    with safe_io.open_write_nofollow(output_json,
+                                     root=(os.path.dirname(output_json) or ".")) as fh:
         json.dump(output, fh, indent=2, default=str)
 
     print(f"\nAnalysis complete -> {output_json}")

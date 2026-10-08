@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
 """
 generate_pdf.py — Generate a phased security remediation plan PDF (neutral branding, multi-cloud).
 
@@ -42,9 +45,17 @@ LOW_GREEN = colors.HexColor("#388E3C")
 LIGHT_GRAY = colors.HexColor("#F4F6F9")
 
 
-def _safe(value):
-    """Render assessment data as literal text inside ReportLab Paragraph markup."""
-    return escape(str(value))
+def _safe(value, max_len=None):
+    """Render assessment data as literal text inside ReportLab Paragraph markup.
+
+    Optionally truncate to ``max_len`` characters (with an ellipsis) BEFORE escaping, so
+    a pathologically long finding field can't blow up the PDF layout. Truncation happens
+    on the raw text so the escaped output never exceeds the intended visible length.
+    """
+    text = str(value)
+    if max_len is not None and len(text) > max_len:
+        text = text[: max(0, max_len - 1)].rstrip() + "…"
+    return escape(text)
 
 
 def load_analysis(path: str) -> dict:
@@ -115,6 +126,12 @@ def build_pdf(data: dict, output_path: str, charts_dir: str = ""):
     output_dir = os.path.dirname(output_path)
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
+    # reportlab opens output_path itself, so we can't hand it a no-follow descriptor.
+    # Refuse up front if the target already exists as a symlink, so a pre-planted
+    # symlink can't redirect the PDF write outside the intended location.
+    if os.path.islink(output_path):
+        print(f"ERROR: refusing to write PDF to a symlink: {output_path}", file=sys.stderr)
+        sys.exit(1)
     doc = SimpleDocTemplate(
         output_path, pagesize=letter,
         leftMargin=0.75 * inch, rightMargin=0.75 * inch,
@@ -232,14 +249,15 @@ def build_pdf(data: dict, output_path: str, charts_dir: str = ""):
         if picks:
             for c in picks[:limit]:
                 E.append(Paragraph(
-                    f"<b>{_safe(emoji)} {_safe(c.get('check_title', ''))}</b>",
+                    f"<b>{_safe(emoji)} {_safe(c.get('check_title', ''), max_len=200)}</b>",
                     styles["SubHead"]))
                 E.append(Paragraph(
                     f"Service: {_safe(c.get('service', 'N/A'))} | Count: {_safe(c.get('count', 0))}",
                     styles["Small"]))
                 E.append(Paragraph(
                     _safe(c.get("remediation_text") or
-                          "Refer to the provider's documentation for remediation steps."),
+                          "Refer to the provider's documentation for remediation steps.",
+                          max_len=2000),
                     styles["BodyWrap"]))
                 E.append(Spacer(1, 0.12 * inch))
         else:

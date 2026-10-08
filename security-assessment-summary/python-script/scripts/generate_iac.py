@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
 """
 generate_iac.py — Generate Terraform remediation modules (multi-cloud, provider-aware).
 
@@ -40,6 +43,8 @@ import os
 import re
 import sys
 from datetime import datetime
+
+import safe_io
 
 
 # ---------------------------------------------------------------------------
@@ -107,6 +112,28 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "example" {
     }
     bucket_key_enabled = true
   }
+}
+
+# Deny any request not using TLS (aws:SecureTransport = false). CIS/Prowler flag buckets
+# without this policy; it ensures data in transit is always encrypted.
+resource "aws_s3_bucket_policy" "require_tls" {
+  bucket = var.bucket_name
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "DenyInsecureTransport"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:*"
+        Resource = [
+          "arn:aws:s3:::${var.bucket_name}",
+          "arn:aws:s3:::${var.bucket_name}/*"
+        ]
+        Condition = { Bool = { "aws:SecureTransport" = "false" } }
+      }
+    ]
+  })
 }''',
         },
         "iam_mfa": {
@@ -149,10 +176,11 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "example" {
     cidr_blocks = [var.allowed_cidr]
   }
   egress {
+    description = "Restricted egress to approved CIDR only (no 0.0.0.0/0)"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.allowed_egress_cidr]
   }
   tags = local.tags
 }''',
@@ -170,20 +198,102 @@ resource "aws_ebs_default_kms_key" "this" {
         },
         "audit_logging": {
             "title": "Multi-Region CloudTrail",
-            "description": "Multi-region CloudTrail with log-file validation.",
+            "description": "Multi-region CloudTrail with a hardened (versioned, encrypted, HTTPS-only, CloudTrail-only-write) log bucket.",
             "body": lambda: '''resource "aws_cloudtrail" "this" {
   name                          = "${var.name_prefix}-trail"
-  s3_bucket_name                = var.log_bucket_name
+  s3_bucket_name                = aws_s3_bucket.trail_logs.id
   is_multi_region_trail         = true
   include_global_service_events = true
   enable_log_file_validation    = true
+  kms_key_id                    = var.cloudtrail_kms_key_arn
+  depends_on                    = [aws_s3_bucket_policy.trail_logs]
   lifecycle { prevent_destroy = true }
   tags = local.tags
+}
+
+resource "aws_s3_bucket" "trail_logs" {
+  bucket              = var.log_bucket_name
+  object_lock_enabled = true
+  lifecycle { prevent_destroy = true }
+  tags = local.tags
+}
+
+# Versioning so log objects cannot be silently overwritten.
+resource "aws_s3_bucket_versioning" "trail_logs" {
+  bucket = aws_s3_bucket.trail_logs.id
+  versioning_configuration { status = "Enabled" }
+}
+
+# Object Lock (governance) retains logs against deletion/overwrite. Requires the bucket
+# to be created with object_lock_enabled; shown here as the hardened target state.
+resource "aws_s3_bucket_object_lock_configuration" "trail_logs" {
+  bucket = aws_s3_bucket.trail_logs.id
+  rule {
+    default_retention {
+      mode = "GOVERNANCE"
+      days = 365
+    }
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "trail_logs" {
+  bucket = aws_s3_bucket.trail_logs.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = var.cloudtrail_kms_key_arn
+    }
+    bucket_key_enabled = true
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "trail_logs" {
+  bucket                  = aws_s3_bucket.trail_logs.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# Bucket policy: require TLS, and allow ONLY CloudTrail to read ACL / write logs.
+resource "aws_s3_bucket_policy" "trail_logs" {
+  bucket = aws_s3_bucket.trail_logs.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "DenyInsecureTransport"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:*"
+        Resource = [
+          aws_s3_bucket.trail_logs.arn,
+          "${aws_s3_bucket.trail_logs.arn}/*"
+        ]
+        Condition = { Bool = { "aws:SecureTransport" = "false" } }
+      },
+      {
+        Sid       = "AWSCloudTrailAclCheck"
+        Effect    = "Allow"
+        Principal = { Service = "cloudtrail.amazonaws.com" }
+        Action    = "s3:GetBucketAcl"
+        Resource  = aws_s3_bucket.trail_logs.arn
+      },
+      {
+        Sid       = "AWSCloudTrailWrite"
+        Effect    = "Allow"
+        Principal = { Service = "cloudtrail.amazonaws.com" }
+        Action    = "s3:PutObject"
+        Resource  = "${aws_s3_bucket.trail_logs.arn}/*"
+        Condition = { StringEquals = { "s3:x-amz-acl" = "bucket-owner-full-control" } }
+      }
+    ]
+  })
 }''',
         },
         "flow_logs": {
             "title": "VPC Flow Logs",
-            "description": "Enable VPC Flow Logs to CloudWatch Logs.",
+            "description": "Enable VPC Flow Logs to an encrypted CloudWatch Log group with CIS-compliant retention.",
             "body": lambda: '''resource "aws_flow_log" "this" {
   vpc_id          = var.vpc_id
   traffic_type    = "ALL"
@@ -193,8 +303,12 @@ resource "aws_ebs_default_kms_key" "this" {
 }
 
 resource "aws_cloudwatch_log_group" "flow" {
-  name              = "/vpc/flowlogs/${var.vpc_id}"
-  retention_in_days = 14
+  name = "/vpc/flowlogs/${var.vpc_id}"
+  # CIS AWS Foundations requires log retention of at least 90 days; default to 365.
+  # Set var.log_retention_days = 0 only if you intentionally want never-expire.
+  retention_in_days = var.log_retention_days
+  # Encrypt log data at rest with a customer-managed KMS key (CIS logging controls).
+  kms_key_id = var.log_kms_key_arn
 }''',
         },
         "kms_rotation": {
@@ -244,20 +358,26 @@ resource "aws_cloudwatch_log_group" "flow" {
         },
         "nsg_restrict": {
             "title": "NSG Restriction",
-            "description": "Network security group denying broad inbound access.",
+            "description": "Network security group denying broad internet inbound to management ports.",
             "body": lambda: '''resource "azurerm_network_security_group" "restricted" {
   name                = "${var.name_prefix}-nsg"
   location            = var.location
   resource_group_name = var.resource_group_name
+
+  # Deny Internet-sourced management traffic at a HIGH priority (low number) so it is
+  # evaluated BEFORE any existing permissive allow rules. A deny placed at a high
+  # priority number (e.g. 4096) would be evaluated last and lose to earlier allow
+  # rules, so it would NOT remediate the finding. Processing order is lowest-number-
+  # first, so this (100) wins over typical allow rules.
   security_rule {
-    name                       = "deny-all-inbound"
-    priority                   = 4096
+    name                       = "deny-internet-ssh-rdp-inbound"
+    priority                   = 100
     direction                  = "Inbound"
     access                     = "Deny"
     protocol                   = "*"
     source_port_range          = "*"
-    destination_port_range     = "*"
-    source_address_prefix      = "*"
+    destination_port_ranges    = ["22", "3389"]
+    source_address_prefix      = "Internet"
     destination_address_prefix = "*"
   }
   tags = local.tags
@@ -455,7 +575,11 @@ PROVIDER_VARIABLES = {
         "kms_key_arn": ("string", None, "KMS key ARN for encryption at rest."),
         "vpc_id": ("string", None, "VPC ID for security group / flow logs."),
         "allowed_cidr": ("string", "10.0.0.0/8", "Allowed ingress CIDR (no 0.0.0.0/0)."),
+        "allowed_egress_cidr": ("string", "10.0.0.0/8", "Allowed egress CIDR (no 0.0.0.0/0). Widen deliberately only if egress to the internet is required."),
         "log_bucket_name": ("string", None, "S3 bucket name for CloudTrail logs."),
+        "cloudtrail_kms_key_arn": ("string", None, "KMS key ARN used to encrypt CloudTrail log files (SSE-KMS)."),
+        "log_retention_days": ("number", 365, "CloudWatch log retention in days (CIS requires >= 90)."),
+        "log_kms_key_arn": ("string", None, "KMS key ARN used to encrypt the flow-log CloudWatch log group."),
         "flow_log_role_arn": ("string", None, "IAM role ARN for VPC flow logs."),
     },
     "azure": {
@@ -513,6 +637,10 @@ def _hcl_default(value):
     """Render a Python default as an HCL literal for a variable default."""
     if value is None:
         return None  # required variable, no default
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
     if isinstance(value, list):
         return "[]" if not value else "[" + ", ".join(_hcl_string_literal(v) for v in value) + "]"
     return _hcl_string_literal(value)
@@ -572,6 +700,8 @@ def _render_tfvars_example(provider: str, customer: str, selected_variables: set
             continue
         if vtype.startswith("list"):
             example = "[]"
+        elif vtype in ("number", "bool"):
+            example = _hcl_default(default) if default is not None else "0"
         else:
             example = _hcl_string_literal(default) if default else '"REPLACE_ME"'
         marker = "" if default not in (None, "") else "   # REQUIRED"
@@ -642,13 +772,18 @@ def normalize_selection(sel: str, provider: str, catalog: dict) -> str:
     return ""
 
 
-def generate_terraform(customer: str, provider: str, selections: list, output_dir: str):
+def generate_terraform(customer: str, provider: str, selections: list, output_dir: str,
+                       force: bool = False):
     """Generate provider-aware Terraform for a directory.
 
     Emits SHARED files (providers.tf, variables.tf, locals.tf, terraform.tfvars.example)
     exactly once, and one resource-only .tf per selected remediation. This avoids
     duplicate variable/locals declarations and undeclared-variable errors when
     Terraform loads every .tf in the directory together.
+
+    Refuses to overwrite a shared file that already exists but was NOT written by a
+    previous run of this generator (i.e. a hand-written file the operator keeps in the
+    same directory), unless ``force`` is set.
     """
     if provider not in REMEDIATION_CATALOG:
         valid_providers = ", ".join(sorted(REMEDIATION_CATALOG.keys()))
@@ -689,19 +824,58 @@ def generate_terraform(customer: str, provider: str, selections: list, output_di
         provider, [provider_blocks, locals_tf, *resource_bodies.values()]
     )
 
-    # Clean up previously generated .tf files from prior runs so that removed
-    # selections don't linger. Terraform loads ALL .tf files in a directory, so
-    # stale remediation files would remain active even if omitted from the new run.
-    # Only remove files matching the generator's own naming patterns to avoid
-    # destroying hand-written Terraform in the same directory.
+    # Clean up ONLY files this generator created in a prior run, tracked in a manifest.
+    # Terraform loads ALL .tf files in a directory, so stale remediation files from a
+    # previous run must be removed — but we must NEVER delete hand-written files an
+    # operator may keep in the same directory (e.g. their own providers.tf/variables.tf).
+    # Using a manifest of our own prior outputs (instead of deleting by name pattern)
+    # guarantees we only remove files we previously wrote.
     os.makedirs(output_dir, exist_ok=True)
-    _shared_files = {"providers.tf", "variables.tf", "locals.tf", "terraform.tfvars.example"}
-    _customer_prefix = re.sub(r'[^\w\-]', '_', customer) + f"_{provider}_"
-    for existing_tf in os.listdir(output_dir):
-        if existing_tf in _shared_files or existing_tf.startswith(_customer_prefix):
-            os.remove(os.path.join(output_dir, existing_tf))
+    _manifest_name = ".cloud-sec-assessment-manifest.json"
+    _manifest_path = os.path.join(output_dir, _manifest_name)
+    _output_real = os.path.realpath(output_dir)
+    _prior = []
+    try:
+        with open(_manifest_path, "r", encoding="utf-8") as mf:
+            _prior = json.load(mf).get("generated", [])
+    except (OSError, ValueError):
+        _prior = []
+    for existing_tf in _prior:
+        # Only basenames are stored; ignore anything that tries to escape via separators.
+        if existing_tf != os.path.basename(existing_tf):
+            continue
+        _target = os.path.join(output_dir, existing_tf)
+        if not os.path.exists(_target):
+            continue
+        # Security: never delete through a symlink, and never delete anything whose real
+        # path escapes the output directory.
+        if os.path.islink(_target):
+            print(f"  [WARN] Skipping cleanup of symlinked entry: {_target}", file=sys.stderr)
+            continue
+        if os.path.realpath(_target) != os.path.join(_output_real, existing_tf):
+            print(f"  [WARN] Skipping cleanup outside output root: {_target}", file=sys.stderr)
+            continue
+        os.remove(_target)
 
-    with open(os.path.join(output_dir, "providers.tf"), "w", encoding="utf-8") as fh:
+    # Refuse to overwrite a hand-written shared file: one that exists on disk but was
+    # NOT recorded as generated by a prior run of this tool. O_TRUNC writes below would
+    # otherwise silently destroy an operator's own providers.tf/variables.tf/locals.tf/
+    # terraform.tfvars.example. --force bypasses this.
+    _shared_files = ["providers.tf", "variables.tf", "locals.tf", "terraform.tfvars.example"]
+    if not force:
+        _conflicts = [
+            name for name in _shared_files
+            if os.path.exists(os.path.join(output_dir, name)) and name not in _prior
+        ]
+        if _conflicts:
+            print(f"  [ERROR] Refusing to overwrite hand-written file(s) in {output_dir}: "
+                  f"{', '.join(_conflicts)}.", file=sys.stderr)
+            print("          These are not recorded as generated by this tool. Move/rename "
+                  "them, choose a different --output-dir, or re-run with --force to overwrite.",
+                  file=sys.stderr)
+            return []
+
+    with safe_io.open_write_nofollow(os.path.join(output_dir, "providers.tf"), root=output_dir) as fh:
         fh.write(f"{DISCLAIMER}\n"
                  f"# Shared provider + terraform settings for the remediation modules.\n\n"
                  'terraform {\n  required_version = ">= 1.5"\n\n'
@@ -709,11 +883,11 @@ def generate_terraform(customer: str, provider: str, selections: list, output_di
                  f"{req}\n"
                  '  }\n}\n\n'
                  f"{provider_blocks}\n")
-    with open(os.path.join(output_dir, "variables.tf"), "w", encoding="utf-8") as fh:
+    with safe_io.open_write_nofollow(os.path.join(output_dir, "variables.tf"), root=output_dir) as fh:
         fh.write(_render_variables_tf(provider, customer, selected_variables) + "\n")
-    with open(os.path.join(output_dir, "locals.tf"), "w", encoding="utf-8") as fh:
+    with safe_io.open_write_nofollow(os.path.join(output_dir, "locals.tf"), root=output_dir) as fh:
         fh.write(locals_tf)
-    with open(os.path.join(output_dir, "terraform.tfvars.example"), "w", encoding="utf-8") as fh:
+    with safe_io.open_write_nofollow(os.path.join(output_dir, "terraform.tfvars.example"), root=output_dir) as fh:
         fh.write(_render_tfvars_example(provider, customer, selected_variables))
 
     # --- One resource-only module file per selection ---
@@ -734,10 +908,15 @@ def generate_terraform(customer: str, provider: str, selections: list, output_di
         # Sanitize customer name for use in filenames (prevent path traversal)
         safe_name = re.sub(r'[^\w\-]', '_', customer)
         filename = f"{safe_name}_{provider}_{sel}.tf"
-        with open(os.path.join(output_dir, filename), "w", encoding="utf-8") as fh:
+        with safe_io.open_write_nofollow(os.path.join(output_dir, filename), root=output_dir) as fh:
             fh.write(content)
         generated.append(filename)
         print(f"  ✓ {filename}")
+
+    # Record exactly what we generated so the NEXT run's cleanup removes only our own
+    # files, never hand-written Terraform the operator keeps in this directory.
+    with safe_io.open_write_nofollow(_manifest_path, root=output_dir) as mf:
+        json.dump({"generated": generated}, mf, indent=2)
 
     return generated
 
@@ -748,6 +927,10 @@ def main():
     parser.add_argument("selections", help="Comma-separated remediation IDs")
     parser.add_argument("output_dir", help="Output directory for .tf files")
     parser.add_argument("--provider", default="", help="Cloud provider (aws|azure|gcp|oci). Defaults to first in analysis.")
+    parser.add_argument("--force", action="store_true",
+                        help="Overwrite hand-written shared files (providers.tf, variables.tf, "
+                             "locals.tf, terraform.tfvars.example) that this tool did not generate. "
+                             "Off by default to protect operator-authored Terraform.")
     args = parser.parse_args()
 
     data = load_analysis(args.analysis_json)
@@ -762,7 +945,8 @@ def main():
     customer = data.get("metadata", {}).get("customer", "Customer")
     selections = [s.strip() for s in args.selections.split(",") if s.strip()]
     print(f"Generating Terraform ({provider}) for: {', '.join(selections)}")
-    generated = generate_terraform(customer, provider, selections, args.output_dir)
+    generated = generate_terraform(customer, provider, selections, args.output_dir,
+                                   force=args.force)
     if not generated:
         print(f"\n❌ No Terraform modules generated — check errors above.", file=sys.stderr)
         sys.exit(1)

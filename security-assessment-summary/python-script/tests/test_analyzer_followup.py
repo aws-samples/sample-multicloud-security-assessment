@@ -1,3 +1,6 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
 """Regressions for scan selection, anonymization, and versioned compliance."""
 
 import json
@@ -88,15 +91,21 @@ class AnalyzerFollowupTests(unittest.TestCase):
 
     def test_anonymization_sidecar_is_not_read_on_repeat_run(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            input_dir = Path(temp_dir)
+            input_dir = Path(temp_dir) / "scan"
+            input_dir.mkdir()
             write_csv(input_dir / "findings.csv")
+            keydir = Path(temp_dir) / "operator_keys"
 
-            first = run_analyzer(input_dir, "--anonymize")
-            second = run_analyzer(input_dir, "--anonymize")
+            first = run_analyzer(input_dir, "--anonymize", "--anon-map-dir", str(keydir))
+            second = run_analyzer(input_dir, "--anonymize", "--anon-map-dir", str(keydir))
 
             self.assertEqual(first.returncode, 0, first.stderr)
             self.assertEqual(second.returncode, 0, second.stderr)
-            self.assertTrue((input_dir / "anon_map.json").exists())
+            # The de-anonymization key lives in the OPERATOR dir, never in the input or
+            # deliverables tree, and is run-stamped (so repeat runs don't overwrite).
+            self.assertFalse((input_dir / "anon_map.json").exists())
+            keys = list(keydir.glob("anon_map_*.json"))
+            self.assertGreaterEqual(len(keys), 2, "each run should write a stamped key")
             data = json.loads(
                 (input_dir / "assessment-summary-aws" / "analysis.json")
                 .read_text(encoding="utf-8")

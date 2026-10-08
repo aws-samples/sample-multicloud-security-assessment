@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: MIT-0
+
 /**
  * generate_pptx.js — Generate an 11-slide, neutrally-branded cloud security assessment deck.
  *

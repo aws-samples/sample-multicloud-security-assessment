@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
 """
 generate_dashboard.py - Generate an interactive multi-cloud HTML security
 dashboard with Chart.js and Bootstrap 5.
@@ -18,6 +21,8 @@ import os
 import sys
 from collections import defaultdict
 from datetime import datetime
+
+import safe_io
 
 
 # ---------------------------------------------------------------------------
@@ -425,7 +430,7 @@ def generate_html(data: dict, output_path: str):
     output_dir = os.path.dirname(output_path)
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as fh:
+    with safe_io.open_write_nofollow(output_path, root=(output_dir or ".")) as fh:
         fh.write("\n".join(parts))
 
     print(f"Dashboard generated -> {output_path}")
@@ -698,6 +703,10 @@ def _html_head(customer: str, scan_date: str) -> str:
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Defense-in-depth CSP: restrict active content to the pinned CDNs. Inline style/script
+     are allowed because the dashboard embeds its own styles and Chart.js config inline;
+     all finding-derived data is still HTML/JSON-escaped before being written here. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; font-src https://cdnjs.cloudflare.com data:; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'">
 <title>CSPM Security Insights Dashboard for {customer}</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js" integrity="sha384-9MhbyIRcBVQiiC7FSd7T38oJNj2Zh+EfxS7/vjhBi4OOT78NlHSnzM31EZRWR1LZ" crossorigin="anonymous"></script>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
