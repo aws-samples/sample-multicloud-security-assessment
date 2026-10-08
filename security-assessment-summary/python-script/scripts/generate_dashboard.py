@@ -376,7 +376,6 @@ def generate_html(data: dict, output_path: str):
     high = severity.get("high", 0)
     medium = severity.get("medium", 0)
     low = severity.get("low", 0)
-    info_count = severity.get("informational", severity.get("info", severity.get("other", 0)))
 
     # Prepare chart data
     severity_chart_data = _build_severity_chart(severity)
@@ -440,11 +439,13 @@ def _build_severity_chart(severity: dict) -> dict:
     labels = []
     data_vals = []
     colors = []
+    other_count = severity.get("other", severity.get("informational", severity.get("info", 0)))
     mapping = [
         ("Critical", severity.get("critical", 0), "#dc3545"),
         ("High", severity.get("high", 0), "#fd7e14"),
         ("Medium", severity.get("medium", 0), "#ffc107"),
         ("Low", severity.get("low", 0), "#28a745"),
+        ("Other", other_count, "#9e9e9e"),
     ]
     for label, val, color in mapping:
         if val > 0:

@@ -101,6 +101,37 @@ class AnalyzerRegressionTests(unittest.TestCase):
 
 
 class DashboardRegressionTests(unittest.TestCase):
+    def test_other_severity_is_in_dashboard_pie(self):
+        analysis = analyzer.analyze_findings([
+            {
+                "PROVIDER": "aws", "STATUS": "FAIL",
+                "SEVERITY": "High", "CHECK_ID": "high-check",
+            },
+            {
+                "PROVIDER": "aws", "STATUS": "FAIL",
+                "SEVERITY": "Informational", "CHECK_ID": "info-check",
+            },
+        ])
+        chart = dashboard._build_severity_chart(
+            analysis["findings_by_severity"]
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "dashboard.html"
+            dashboard.generate_html({
+                "metadata": {"providers": ["aws"]},
+                "summary": analysis,
+                "dashboard_findings": analysis["dashboard_findings"],
+                "top_failed_checks": analysis["top_failed_checks"],
+            }, str(output_path))
+            rendered = output_path.read_text(encoding="utf-8")
+
+        self.assertEqual(chart["data"]["labels"], ["High", "Other"])
+        self.assertEqual(chart["data"]["datasets"][0]["data"], [1, 1])
+        self.assertEqual(sum(chart["data"]["datasets"][0]["data"]),
+                         analysis["fail_count"])
+        self.assertIn('"labels": ["High", "Other"]', rendered)
+
     def test_dashboard_uses_scope_id_and_all_statuses_for_account_metrics(self):
         findings = [
             {
