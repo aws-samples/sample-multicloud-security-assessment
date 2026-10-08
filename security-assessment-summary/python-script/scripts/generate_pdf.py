@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 import sys
+from html import escape
 from providers import PROVIDER_LABELS as PROVIDER_LABEL, PROVIDER_SCOPE_TERM as SCOPE_TERM
 
 try:
@@ -20,7 +21,8 @@ try:
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import inch
     from reportlab.platypus import (
-        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, Image
+        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, Image,
+        KeepTogether,
     )
     from reportlab.lib.enums import TA_CENTER
 except ImportError:
@@ -38,6 +40,12 @@ HIGH_ORANGE = colors.HexColor("#F57C00")
 MEDIUM_YELLOW = colors.HexColor("#FBC02D")
 LOW_GREEN = colors.HexColor("#388E3C")
 LIGHT_GRAY = colors.HexColor("#F4F6F9")
+
+
+def _safe(value):
+    """Render assessment data as literal text inside ReportLab Paragraph markup."""
+    return escape(str(value))
+
 
 def load_analysis(path: str) -> dict:
     with open(path, "r", encoding="utf-8") as fh:
@@ -128,10 +136,12 @@ def build_pdf(data: dict, output_path: str, charts_dir: str = ""):
     E.append(Paragraph("Cloud Security", styles["CenterTitle"]))
     E.append(Paragraph("Remediation Plan", styles["CenterTitle"]))
     E.append(Spacer(1, 0.5 * inch))
-    E.append(Paragraph(customer, styles["Subtitle"]))
-    E.append(Paragraph(f"Assessment Date: {scan_date}", styles["BodyWrap"]))
-    E.append(Paragraph(f"Cloud Provider(s): {', '.join(provider_labels)}", styles["BodyWrap"]))
-    E.append(Paragraph(f"{scope_term.capitalize()}(s): {', '.join(scopes) if scopes else 'N/A'}", styles["BodyWrap"]))
+    E.append(Paragraph(_safe(customer), styles["Subtitle"]))
+    E.append(Paragraph(f"Assessment Date: {_safe(scan_date)}", styles["BodyWrap"]))
+    E.append(Paragraph(f"Cloud Provider(s): {_safe(', '.join(provider_labels))}", styles["BodyWrap"]))
+    E.append(Paragraph(
+        f"{_safe(scope_term.capitalize())}(s): {_safe(', '.join(scopes) if scopes else 'N/A')}",
+        styles["BodyWrap"]))
     E.append(Paragraph("Confidential — For Customer Use Only", styles["Small"]))
     E.append(PageBreak())
 
@@ -139,9 +149,11 @@ def build_pdf(data: dict, output_path: str, charts_dir: str = ""):
     E.append(Paragraph("1. Executive Summary", styles["SectionHead"]))
     E.append(Paragraph(
         f"This remediation plan addresses findings from a security assessment of {len(scopes)} "
-        f"{scope_term}(s) on {', '.join(provider_labels)}, conducted on {scan_date}. The assessment "
-        f"evaluated {summary['total_checks']:,} security checks, achieving an overall security score "
-        f"of <b>{score}%</b>.", styles["BodyWrap"]))
+        f"{_safe(scope_term)}(s) on {_safe(', '.join(provider_labels))}, "
+        f"conducted on {_safe(scan_date)}. The assessment "
+        f"evaluated {_safe(format(summary['total_checks'], ','))} security checks, "
+        f"achieving an overall security score of <b>{_safe(score)}%</b>.",
+        styles["BodyWrap"]))
     E.append(Spacer(1, 0.15 * inch))
     gauge = _chart(charts_dir, "score_gauge", width=3.2 * inch)
     if gauge:
@@ -175,23 +187,27 @@ def build_pdf(data: dict, output_path: str, charts_dir: str = ""):
                        (("service_bar", "svc_bar"), "Top Services by Failed Checks")):
         img = _chart(charts_dir, cname)
         if img:
-            E.append(Paragraph(cap, styles["SubHead"]))
-            E.append(img)
-            E.append(Spacer(1, 0.15 * inch))
+            E.append(KeepTogether([
+                Paragraph(cap, styles["SubHead"]),
+                img,
+                Spacer(1, 0.15 * inch),
+            ]))
 
     if len(providers) > 1:
         prov_img = _chart(charts_dir, "provider_bar")
         if prov_img:
-            E.append(Paragraph("Findings by Cloud Provider", styles["SubHead"]))
-            E.append(prov_img)
-            E.append(Spacer(1, 0.15 * inch))
+            E.append(KeepTogether([
+                Paragraph("Findings by Cloud Provider", styles["SubHead"]),
+                prov_img,
+                Spacer(1, 0.15 * inch),
+            ]))
 
     E.append(Paragraph("Top Failed Security Checks", styles["SubHead"]))
     table_data = [["#", "Check", "Service", "Severity", "Count"]]
     for i, check in enumerate(top_checks[:15], 1):
         table_data.append([
             str(i),
-            Paragraph(str(check.get("check_title", ""))[:55], styles["BodyWrap"]),
+            Paragraph(_safe(str(check.get("check_title", ""))[:55]), styles["BodyWrap"]),
             str(check.get("service", "")),
             str(check.get("severity", "")),
             str(check.get("count", 0)),
@@ -214,9 +230,16 @@ def build_pdf(data: dict, output_path: str, charts_dir: str = ""):
         picks = [c for c in checks if str(c.get("severity", "")).lower() == sev_label]
         if picks:
             for c in picks[:limit]:
-                E.append(Paragraph(f"<b>{emoji} {c.get('check_title','')}</b>", styles["SubHead"]))
-                E.append(Paragraph(f"Service: {c.get('service','N/A')} | Count: {c.get('count',0)}", styles["Small"]))
-                E.append(Paragraph(c.get("remediation_text") or "Refer to the provider's documentation for remediation steps.", styles["BodyWrap"]))
+                E.append(Paragraph(
+                    f"<b>{_safe(emoji)} {_safe(c.get('check_title', ''))}</b>",
+                    styles["SubHead"]))
+                E.append(Paragraph(
+                    f"Service: {_safe(c.get('service', 'N/A'))} | Count: {_safe(c.get('count', 0))}",
+                    styles["Small"]))
+                E.append(Paragraph(
+                    _safe(c.get("remediation_text") or
+                          "Refer to the provider's documentation for remediation steps."),
+                    styles["BodyWrap"]))
                 E.append(Spacer(1, 0.12 * inch))
         else:
             E.append(Paragraph("No findings at this severity.", styles["BodyWrap"]))
@@ -255,7 +278,7 @@ def build_pdf(data: dict, output_path: str, charts_dir: str = ""):
         "Rotate credentials/keys on a regular schedule",
         "Monitor audit logs for unauthorized activity",
     ]:
-        E.append(Paragraph(f"• {item}", styles["BodyWrap"]))
+        E.append(Paragraph(f"• {_safe(item)}", styles["BodyWrap"]))
     E.append(PageBreak())
 
     # Risk Matrix
@@ -316,7 +339,7 @@ def build_pdf(data: dict, output_path: str, charts_dir: str = ""):
         "Compliance pass rate: ≥ 85% across all frameworks",
         "Re-assessment frequency: Monthly",
     ]:
-        E.append(Paragraph(f"• {m}", styles["BodyWrap"]))
+        E.append(Paragraph(f"• {_safe(m)}", styles["BodyWrap"]))
     E.append(PageBreak())
 
     # Appendix

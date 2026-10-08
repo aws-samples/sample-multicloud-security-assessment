@@ -92,38 +92,44 @@ def _severity_bg_class(sev: str) -> str:
     return "bg-secondary"
 
 
+def _is_passed(finding: dict) -> bool:
+    return str(finding.get("status") or "").upper().startswith("PASS")
+
+
+def _is_failed(finding: dict) -> bool:
+    return str(finding.get("status") or "").upper().startswith("FAIL")
+
+
+def _score_components(findings: list) -> tuple:
+    """Count assessed findings and weight only their failures."""
+    scored = 0
+    weighted_failed = 0.0
+    for finding in findings:
+        if _is_passed(finding):
+            scored += 1
+        elif _is_failed(finding):
+            scored += 1
+            severity = finding.get("severity", "other").lower()
+            weighted_failed += SEVERITY_WEIGHTS.get(severity, 1)
+    return scored, weighted_failed
+
+
 def _compute_risk_score(findings: list) -> float:
     """Compute risk score for a group of findings (0-100 scale)."""
-    if not findings:
+    scored, weighted_failed = _score_components(findings)
+    if scored == 0:
         return 0.0
-    total = len(findings)
-    max_possible = total * SEVERITY_WEIGHTS.get("critical", 10)
-    if max_possible == 0:
-        return 0.0
-    weighted_failed = 0.0
-    for f in findings:
-        status = f.get("status", "").upper()
-        if status == "FAIL" or status == "FAILED":
-            sev = f.get("severity", "other").lower()
-            weighted_failed += SEVERITY_WEIGHTS.get(sev, 1)
+    max_possible = scored * SEVERITY_WEIGHTS["critical"]
     return round((weighted_failed / max_possible) * 100, 1)
 
 
 def _compute_security_score(findings: list) -> float:
     """Compute overall security score using weighted penalty approach."""
-    if not findings:
-        return 100.0
-    total = len(findings)
-    max_possible = total * SEVERITY_WEIGHTS.get("critical", 10)
-    if max_possible == 0:
-        return 100.0
-    weighted_penalty = 0.0
-    for f in findings:
-        status = f.get("status", "").upper()
-        if status == "FAIL" or status == "FAILED":
-            sev = f.get("severity", "other").lower()
-            weighted_penalty += SEVERITY_WEIGHTS.get(sev, 1)
-    score = 100 - (weighted_penalty / max_possible * 100)
+    scored, weighted_failed = _score_components(findings)
+    if scored == 0:
+        return 0.0
+    max_possible = scored * SEVERITY_WEIGHTS["critical"]
+    score = 100 - (weighted_failed / max_possible * 100)
     return round(max(0, min(100, score)), 1)
 
 
@@ -138,13 +144,13 @@ def _compute_per_account_stats(detailed_findings: list) -> list:
     results = []
     for acct_id, findings in by_account.items():
         total = len(findings)
-        failed = sum(1 for f in findings if f.get("status", "").upper() in ("FAIL", "FAILED"))
-        passed = sum(1 for f in findings
-                     if f.get("status", "").upper() in ("PASS", "PASSED"))
+        failed = sum(1 for f in findings if _is_failed(f))
+        passed = sum(1 for f in findings if _is_passed(f))
         manual = total - failed - passed
-        pass_rate = round((passed / total * 100), 1) if total > 0 else 0.0
-        critical = sum(1 for f in findings if f.get("status", "").upper() in ("FAIL", "FAILED") and f.get("severity", "").lower() == "critical")
-        high = sum(1 for f in findings if f.get("status", "").upper() in ("FAIL", "FAILED") and f.get("severity", "").lower() == "high")
+        scored = passed + failed
+        pass_rate = round((passed / scored * 100), 1) if scored > 0 else 0.0
+        critical = sum(1 for f in findings if _is_failed(f) and f.get("severity", "").lower() == "critical")
+        high = sum(1 for f in findings if _is_failed(f) and f.get("severity", "").lower() == "high")
         risk_score = _compute_risk_score(findings)
         # Try to get an account name from the findings
         account_name = None
@@ -179,10 +185,12 @@ def _compute_per_service_stats(detailed_findings: list) -> list:
     results = []
     for svc, findings in by_service.items():
         total = len(findings)
-        failed = sum(1 for f in findings if f.get("status", "").upper() in ("FAIL", "FAILED"))
-        failure_rate = round((failed / total * 100), 1) if total > 0 else 0.0
-        critical = sum(1 for f in findings if f.get("status", "").upper() in ("FAIL", "FAILED") and f.get("severity", "").lower() == "critical")
-        high = sum(1 for f in findings if f.get("status", "").upper() in ("FAIL", "FAILED") and f.get("severity", "").lower() == "high")
+        failed = sum(1 for f in findings if _is_failed(f))
+        passed = sum(1 for f in findings if _is_passed(f))
+        scored = passed + failed
+        failure_rate = round((failed / scored * 100), 1) if scored > 0 else 0.0
+        critical = sum(1 for f in findings if _is_failed(f) and f.get("severity", "").lower() == "critical")
+        high = sum(1 for f in findings if _is_failed(f) and f.get("severity", "").lower() == "high")
         risk_score = _compute_risk_score(findings)
         results.append({
             "service": svc,
@@ -207,11 +215,11 @@ def _compute_per_region_stats(detailed_findings: list) -> list:
     results = []
     for region, findings in by_region.items():
         total = len(findings)
-        failed = sum(1 for f in findings if f.get("status", "").upper() in ("FAIL", "FAILED"))
-        critical = sum(1 for f in findings if f.get("status", "").upper() in ("FAIL", "FAILED") and f.get("severity", "").lower() == "critical")
-        high = sum(1 for f in findings if f.get("status", "").upper() in ("FAIL", "FAILED") and f.get("severity", "").lower() == "high")
-        medium = sum(1 for f in findings if f.get("status", "").upper() in ("FAIL", "FAILED") and f.get("severity", "").lower() == "medium")
-        low = sum(1 for f in findings if f.get("status", "").upper() in ("FAIL", "FAILED") and f.get("severity", "").lower() == "low")
+        failed = sum(1 for f in findings if _is_failed(f))
+        critical = sum(1 for f in findings if _is_failed(f) and f.get("severity", "").lower() == "critical")
+        high = sum(1 for f in findings if _is_failed(f) and f.get("severity", "").lower() == "high")
+        medium = sum(1 for f in findings if _is_failed(f) and f.get("severity", "").lower() == "medium")
+        low = sum(1 for f in findings if _is_failed(f) and f.get("severity", "").lower() == "low")
         risk_score = _compute_risk_score(findings)
         results.append({
             "region": region,
@@ -352,8 +360,8 @@ def generate_html(data: dict, output_path: str):
     region_stats = _compute_per_region_stats(dashboard_findings) if dashboard_findings else []
 
     # Security score (prefer pre-computed, fallback to computation)
-    security_score = summary.get("security_score", 0)
-    if not security_score and dashboard_findings:
+    security_score = summary.get("security_score")
+    if security_score is None:
         security_score = _compute_security_score(dashboard_findings)
 
     # Build roadmap

@@ -445,9 +445,9 @@ def load_analysis(path: str) -> dict:
         return json.load(fh)
 
 
-# All variables that resource bodies may reference, per provider. Declared ONCE in
-# a shared variables.tf so multiple selected modules never redeclare them, and no
-# resource references an undeclared variable. Format: name -> (hcl_type, default_or_None, description)
+# Available variable definitions for each provider. Referenced variables are
+# declared once in shared variables.tf. Format:
+# name -> (hcl_type, default_or_None, description)
 PROVIDER_VARIABLES = {
     "aws": {
         "region": ("string", "us-east-1", "Target AWS region."),
@@ -502,8 +502,20 @@ def _hcl_default(value):
     return f'"{value}"'
 
 
-def _render_variables_tf(provider: str, customer: str) -> str:
-    """Build the shared variables.tf declaring every variable the modules may use."""
+def _selected_variables(provider: str, terraform_parts: list) -> set:
+    """Find variables referenced by the selected resources, provider, and locals."""
+    referenced = set()
+    for part in terraform_parts:
+        referenced.update(re.findall(r"\bvar\.([A-Za-z_][A-Za-z0-9_]*)\b", part))
+    available = {"environment", "name_prefix", *PROVIDER_VARIABLES[provider]}
+    missing = referenced - available
+    if missing:
+        raise ValueError(f"Missing variable definitions: {', '.join(sorted(missing))}")
+    return referenced
+
+
+def _render_variables_tf(provider: str, customer: str, selected_variables: set) -> str:
+    """Build shared variables.tf for variables referenced by generated Terraform."""
     lines = [
         "# Shared variable declarations for all remediation modules in this directory.",
         "# Declared once here so modules never redeclare them. Fill values in terraform.tfvars.",
@@ -516,6 +528,8 @@ def _render_variables_tf(provider: str, customer: str) -> str:
     }
     allvars = {**common, **PROVIDER_VARIABLES.get(provider, {})}
     for name, (vtype, default, desc) in allvars.items():
+        if name not in selected_variables:
+            continue
         block = [f'variable "{name}" {{', f'  type        = {vtype}', f'  description = "{desc}"']
         d = _hcl_default(default)
         if d is not None:
@@ -526,16 +540,20 @@ def _render_variables_tf(provider: str, customer: str) -> str:
     return "\n".join(lines)
 
 
-def _render_tfvars_example(provider: str, customer: str) -> str:
-    """Build a single terraform.tfvars.example covering all variables."""
+def _render_tfvars_example(provider: str, customer: str, selected_variables: set) -> str:
+    """Build an example tfvars file for referenced variables."""
     lines = [
         "# Example variables — copy to terraform.tfvars and fill in real values.",
         "# Variables with a sensible default may be omitted.",
         "",
-        'environment = "production"',
-        f'name_prefix = "{customer.lower().replace(" ", "-")}"',
     ]
+    if "environment" in selected_variables:
+        lines.append('environment = "production"')
+    if "name_prefix" in selected_variables:
+        lines.append(f'name_prefix = "{customer.lower().replace(" ", "-")}"')
     for name, (vtype, default, desc) in PROVIDER_VARIABLES.get(provider, {}).items():
+        if name not in selected_variables:
+            continue
         if vtype.startswith("list"):
             example = "[]"
         else:
@@ -547,7 +565,21 @@ def _render_tfvars_example(provider: str, customer: str) -> str:
 
 def _render_locals_tf(customer: str, provider: str) -> str:
     """Shared locals.tf with tags/labels appropriate to the provider."""
-    key = "labels" if provider == "gcp" else "tags"
+    if provider == "gcp":
+        # Bucket label values are limited to 63 lowercase ASCII letters, digits,
+        # underscores, and dashes. The environment is supplied later via tfvars.
+        safe_customer = re.sub(r"[^a-z0-9_-]", "_", customer.lower())[:63]
+        return (
+            "# Shared Cloud Storage-compatible labels for remediation modules.\n"
+            "locals {\n  labels = {\n"
+            '    environment = substr(replace(lower(var.environment), "/[^a-z0-9_-]/", "_"), 0, 63)\n'
+            '    managed_by   = "terraform"\n'
+            '    purpose      = "security_remediation"\n'
+            f'    customer     = "{safe_customer}"\n'
+            "  }\n}\n"
+        )
+
+    key = "tags"
     # Escape customer name for safe HCL embedding (quotes, backslashes, dollar signs)
     safe_customer = customer.replace("\\", "\\\\").replace('"', '\\"').replace("$", "$$")
     return (
@@ -611,7 +643,6 @@ def generate_terraform(customer: str, provider: str, selections: list, output_di
         return []
     catalog = REMEDIATION_CATALOG[provider]
     tf_meta = PROVIDER_TF[provider]
-    os.makedirs(output_dir, exist_ok=True)
 
     # Resolve each selection (accepts provider-neutral names or provider-specific keys),
     # then validate. Fail loudly on unknown IDs rather than silently skipping.
@@ -623,20 +654,10 @@ def generate_terraform(customer: str, provider: str, selections: list, output_di
     if unknown:
         print(f"  [ERROR] Unknown {provider} remediation ID(s): {', '.join(unknown)}", file=sys.stderr)
         print(f"          Valid {provider} IDs: {', '.join(catalog.keys())}", file=sys.stderr)
+        return []
     if not valid:
         print(f"  [ERROR] No valid remediation selections for provider '{provider}'. Nothing generated.", file=sys.stderr)
         return []
-
-    # Clean up previously generated .tf files from prior runs so that removed
-    # selections don't linger. Terraform loads ALL .tf files in a directory, so
-    # stale remediation files would remain active even if omitted from the new run.
-    # Only remove files matching the generator's own naming patterns to avoid
-    # destroying hand-written Terraform in the same directory.
-    _shared_files = {"providers.tf", "variables.tf", "locals.tf", "terraform.tfvars.example"}
-    _customer_prefix = re.sub(r'[^\w\-]', '_', customer) + f"_{provider}_"
-    for existing_tf in os.listdir(output_dir):
-        if existing_tf in _shared_files or existing_tf.startswith(_customer_prefix):
-            os.remove(os.path.join(output_dir, existing_tf))
 
     # --- Shared files (written once) ---
     # Build a version-pinned required_providers block. Add azuread when an Azure
@@ -648,6 +669,24 @@ def generate_terraform(customer: str, provider: str, selections: list, output_di
     provider_blocks = tf_meta["provider_block"]
     if needs_azuread:
         provider_blocks = provider_blocks + '\n\nprovider "azuread" {}'
+    locals_tf = _render_locals_tf(customer, provider)
+    resource_bodies = {sel: catalog[sel]["body"]() for sel in valid}
+    selected_variables = _selected_variables(
+        provider, [provider_blocks, locals_tf, *resource_bodies.values()]
+    )
+
+    # Clean up previously generated .tf files from prior runs so that removed
+    # selections don't linger. Terraform loads ALL .tf files in a directory, so
+    # stale remediation files would remain active even if omitted from the new run.
+    # Only remove files matching the generator's own naming patterns to avoid
+    # destroying hand-written Terraform in the same directory.
+    os.makedirs(output_dir, exist_ok=True)
+    _shared_files = {"providers.tf", "variables.tf", "locals.tf", "terraform.tfvars.example"}
+    _customer_prefix = re.sub(r'[^\w\-]', '_', customer) + f"_{provider}_"
+    for existing_tf in os.listdir(output_dir):
+        if existing_tf in _shared_files or existing_tf.startswith(_customer_prefix):
+            os.remove(os.path.join(output_dir, existing_tf))
+
     with open(os.path.join(output_dir, "providers.tf"), "w", encoding="utf-8") as fh:
         fh.write(f"{DISCLAIMER}\n"
                  f"# Shared provider + terraform settings for the remediation modules.\n\n"
@@ -657,11 +696,11 @@ def generate_terraform(customer: str, provider: str, selections: list, output_di
                  '  }\n}\n\n'
                  f"{provider_blocks}\n")
     with open(os.path.join(output_dir, "variables.tf"), "w", encoding="utf-8") as fh:
-        fh.write(_render_variables_tf(provider, customer) + "\n")
+        fh.write(_render_variables_tf(provider, customer, selected_variables) + "\n")
     with open(os.path.join(output_dir, "locals.tf"), "w", encoding="utf-8") as fh:
-        fh.write(_render_locals_tf(customer, provider))
+        fh.write(locals_tf)
     with open(os.path.join(output_dir, "terraform.tfvars.example"), "w", encoding="utf-8") as fh:
-        fh.write(_render_tfvars_example(provider, customer))
+        fh.write(_render_tfvars_example(provider, customer, selected_variables))
 
     # --- One resource-only module file per selection ---
     generated = ["providers.tf", "variables.tf", "locals.tf", "terraform.tfvars.example"]
@@ -676,7 +715,7 @@ def generate_terraform(customer: str, provider: str, selections: list, output_di
             f"# the correct security posture. You must customize it to target your existing\n"
             f"# resources (e.g. attach to existing subnets/instances) before applying.\n"
             f"# Always run `terraform plan` to review changes before `terraform apply`.\n\n"
-            f"{entry['body']()}\n"
+            f"{resource_bodies[sel]}\n"
         )
         # Sanitize customer name for use in filenames (prevent path traversal)
         safe_name = re.sub(r'[^\w\-]', '_', customer)
@@ -708,8 +747,6 @@ def main():
 
     customer = data.get("metadata", {}).get("customer", "Customer")
     selections = [s.strip() for s in args.selections.split(",") if s.strip()]
-    os.makedirs(args.output_dir, exist_ok=True)
-
     print(f"Generating Terraform ({provider}) for: {', '.join(selections)}")
     generated = generate_terraform(customer, provider, selections, args.output_dir)
     if not generated:

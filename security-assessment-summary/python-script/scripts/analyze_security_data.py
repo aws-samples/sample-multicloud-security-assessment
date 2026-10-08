@@ -39,8 +39,7 @@ except OverflowError:
     # value that is universally accepted.
     csv.field_size_limit(min(sys.maxsize, 2**31 - 1))
 
-# Collects human-readable parse warnings so they can be surfaced in the output JSON
-# (not just printed to stderr) — a downstream consumer can see if any file failed.
+# Collects errors from selected inputs so main() can reject incomplete analyses.
 _PARSE_WARNINGS = []
 
 
@@ -772,30 +771,30 @@ def analyze_compliance(compliance_records: list) -> dict:
       ``pass_rate`` remains a valid scope-weighted rate.
     * requirement-level (``requirements_*``) de-duplicates by REQUIREMENTS_ID so the
       denominator is the framework's actual requirement count regardless of how many
-      scopes were scanned. A requirement counts as passing only if no scope reported
-      a FAIL for it. This is what "framework coverage" normally means.
+      scopes were scanned. A requirement counts as passing only when every
+      observed row explicitly reports PASS or PASSED.
     """
     frameworks = defaultdict(lambda: {"total": 0, "pass": 0, "fail": 0})
-    # requirement id -> True while every observed row passes; False once any FAIL is seen
+    # requirement id -> True only while every observed row explicitly passes
     req_status = defaultdict(dict)
     scopes = defaultdict(set)
     for rec in compliance_records:
         fw = rec.get("FRAMEWORK", "Unknown")
         frameworks[fw]["total"] += 1
-        status = rec.get("STATUS", "").upper()
-        if status.startswith("PASS"):
+        raw_status = str(rec.get("STATUS") or "").strip().upper()
+        status = {"PASSED": "PASS", "FAILED": "FAIL"}.get(raw_status, raw_status)
+        if status == "PASS":
             frameworks[fw]["pass"] += 1
-        elif status.startswith("FAIL"):
+        elif status == "FAIL":
             frameworks[fw]["fail"] += 1
         scope = rec.get("ACCOUNTID") or rec.get("SUBSCRIPTIONID") or rec.get("PROJECTID")
         if scope:
             scopes[fw].add(scope)
         req_id = rec.get("REQUIREMENTS_ID")
         if req_id:
-            if status.startswith("FAIL"):
-                req_status[fw][req_id] = False
-            else:
-                req_status[fw].setdefault(req_id, True)
+            req_status[fw][req_id] = (
+                req_status[fw].get(req_id, True) and status == "PASS"
+            )
 
     result = {}
     for fw, counts in frameworks.items():
@@ -976,6 +975,7 @@ def main():
                         help="Replace real account/subscription/project/tenancy identifiers "
                              "with generic labels (Scope A, Scope B, ...) across all output.")
     args = parser.parse_args()
+    _PARSE_WARNINGS.clear()
 
     input_folder = os.path.abspath(args.input_folder)
 
@@ -1010,9 +1010,6 @@ def main():
     files = identify_files(input_folder, excluded_roots=excluded_roots,
                            excluded_files=[Path(output_json)])
     scope_ids = detect_scope_ids(input_folder, excluded_roots=excluded_roots)
-
-    if _output_json_dir:
-        os.makedirs(_output_json_dir, exist_ok=True)
 
     file_count = sum(len(v) for v in files.values())
     print(f"       Found {file_count} files, {len(scope_ids)} scope id(s): {scope_ids}")
@@ -1086,6 +1083,14 @@ def main():
         records = parse_prowler_compliance_csv(csv_path)
         all_compliance.extend(records)
         print(f"         -> {len(records)} records")
+
+    if _PARSE_WARNINGS:
+        print(f"ERROR: {len(_PARSE_WARNINGS)} selected input file(s) could not be "
+              "fully parsed; analysis was not written.", file=sys.stderr)
+        sys.exit(1)
+
+    if _output_json_dir:
+        os.makedirs(_output_json_dir, exist_ok=True)
 
     print("[4/4] Analyzing findings...")
     analysis = analyze_findings(all_findings)
@@ -1167,11 +1172,6 @@ def main():
                   file=sys.stderr)
         else:
             print(f"   Anonymization applied and verified: {len(mask)} scope id(s) masked, 0 leaks.")
-
-    # Surface any parse warnings collected during this run into the output metadata,
-    # so incomplete results are visible to downstream consumers (not just on stderr).
-    if _PARSE_WARNINGS:
-        output["metadata"]["parse_warnings"] = list(_PARSE_WARNINGS)
 
     with open(output_json, "w", encoding="utf-8") as fh:
         json.dump(output, fh, indent=2, default=str)
