@@ -224,7 +224,10 @@ if (complianceChart) slide.addImage({ path: complianceChart, x: 0.5, y: 0.9, w: 
 else if (providerChart && multiProvider) slide.addImage({ path: providerChart, x: 0.5, y: 0.9, w: 6, h: 4.0 });
 const fwList = Object.entries(compliance).slice(0, 5);
 fwList.forEach(([fw, info], i) => {
-  slide.addText(`${fw}: ${info.pass_rate}%`, { x: 7.0, y: 1.2 + i * 0.5, w: 2.5, h: 0.4, fontSize: 11, color: "444444" });
+  slide.addText(`${fw}: ${info.pass_rate}%`, {
+    x: 6.7, y: 1.0 + i * 0.8, w: 2.8, h: 0.7,
+    fontSize: 10, color: "444444", valign: "middle",
+  });
 });
 
 // ---------------------------------------------------------------------------

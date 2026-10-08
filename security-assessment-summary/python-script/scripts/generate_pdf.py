@@ -127,6 +127,7 @@ def build_pdf(data: dict, output_path: str, charts_dir: str = ""):
     styles.add(ParagraphStyle("SubHead", parent=styles["Heading2"], fontSize=13, textColor=SLATE_DARK, spaceBefore=12, spaceAfter=6))
     styles.add(ParagraphStyle("BodyWrap", parent=styles["Normal"], fontSize=10, leading=13, spaceAfter=6))
     styles.add(ParagraphStyle("Small", parent=styles["Normal"], fontSize=9, leading=11, textColor=colors.gray))
+    styles.add(ParagraphStyle("TableWrap", parent=styles["Normal"], fontSize=9, leading=11, splitLongWords=1))
     styles.add(ParagraphStyle("CenterTitle", parent=styles["Title"], fontSize=28, textColor=SLATE_DARK, alignment=TA_CENTER))
 
     E = []
@@ -314,7 +315,8 @@ def build_pdf(data: dict, output_path: str, charts_dir: str = ""):
         for fw, info in list(compliance.items())[:10]:
             _req = (f"{info.get('requirements_passed', 0)}/{info['requirements_total']}"
                     if info.get("requirements_total") else "—")
-            comp.append([fw, str(info["total"]), str(info["pass"]), str(info["fail"]),
+            comp.append([Paragraph(_safe(fw), styles["TableWrap"]),
+                         str(info["total"]), str(info["pass"]), str(info["fail"]),
                          f"{info['pass_rate']}%", _req])
         t = Table(comp, colWidths=[2.2 * inch, 0.9 * inch, 0.7 * inch, 0.7 * inch, 0.9 * inch, 0.8 * inch])
         t.setStyle(TableStyle([
@@ -323,6 +325,7 @@ def build_pdf(data: dict, output_path: str, charts_dir: str = ""):
             ("FONTSIZE", (0, 0), (-1, -1), 9),
             ("GRID", (0, 0), (-1, -1), 0.5, colors.lightgrey),
             ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, LIGHT_GRAY]),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ]))
         E.append(t)
     else:
