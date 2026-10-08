@@ -1356,12 +1356,25 @@ def _html_compliance_section(compliance: dict) -> str:
             passed = info.get("pass", info.get("passed", 0))
             rate = info.get("pass_rate", round((passed / total * 100), 1) if total > 0 else 0)
             color = "#28a745" if rate >= 80 else "#fd7e14" if rate >= 50 else "#dc3545"
+            req_total = info.get("requirements_total")
+            if req_total:
+                req_passed = info.get("requirements_passed", 0)
+                req_rate = info.get(
+                    "requirements_pass_rate", round(req_passed / req_total * 100, 1)
+                )
+                req_line = (f'<div class="small text-muted mb-2">Requirements Met: '
+                            f'{_esc(req_passed)} / {_esc(req_total)} ({_esc(req_rate)}%)</div>')
+            elif req_total is not None:
+                req_line = '<div class="small text-muted mb-2">Requirements Met: Not available</div>'
+            else:
+                req_line = ""
             cards_html += f"""
                 <div class="col-md-4 mb-3">
                     <div class="card h-100">
                         <div class="card-body">
                             <h6>{_esc(fw)}</h6>
-                            <div class="small text-muted mb-2">Checks passed: {passed} / {total} ({rate}%)</div>
+                            <div class="small text-muted">Total Checks: {_esc(total)} · {_esc(passed)} passed ({_esc(rate)}%)</div>
+                            {req_line}
                             <div class="progress" style="height: 8px;">
                                 <div class="progress-bar" style="width: {rate}%; background-color: {color};"></div>
                             </div>

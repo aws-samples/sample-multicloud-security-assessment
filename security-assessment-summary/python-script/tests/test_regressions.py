@@ -101,6 +101,34 @@ class AnalyzerRegressionTests(unittest.TestCase):
 
 
 class DashboardRegressionTests(unittest.TestCase):
+    def test_compliance_card_shows_check_and_requirement_denominators(self):
+        coverage = analyzer.analyze_compliance([
+            {"NAME": "CIS AWS v4.0.1", "REQUIREMENTS_ID": "1.1",
+             "STATUS": "PASS", "ACCOUNTID": "scope-a"},
+            {"NAME": "CIS AWS v4.0.1", "REQUIREMENTS_ID": "1.1",
+             "STATUS": "PASS", "ACCOUNTID": "scope-b"},
+            {"NAME": "CIS AWS v4.0.1", "REQUIREMENTS_ID": "1.2",
+             "STATUS": "PASS", "ACCOUNTID": "scope-a"},
+            {"NAME": "CIS AWS v4.0.1", "REQUIREMENTS_ID": "1.2",
+             "STATUS": "FAIL", "ACCOUNTID": "scope-b"},
+        ])
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "dashboard.html"
+            dashboard.generate_html({
+                "metadata": {"providers": ["aws"]},
+                "summary": {
+                    "total_checks": 0, "pass_count": 0, "fail_count": 0,
+                    "findings_by_severity": {}, "findings_by_service": {},
+                },
+                "compliance_coverage": coverage,
+            }, str(output_path))
+            rendered = output_path.read_text(encoding="utf-8")
+
+        self.assertIn("Total Checks: 4", rendered)
+        self.assertIn("3 passed (75.0%)", rendered)
+        self.assertIn("Requirements Met: 1 / 2 (50.0%)", rendered)
+
     def test_other_severity_is_in_dashboard_pie(self):
         analysis = analyzer.analyze_findings([
             {
