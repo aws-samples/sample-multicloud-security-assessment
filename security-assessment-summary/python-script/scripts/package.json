@@ -1,0 +1,13 @@
+{
+  "name": "cloud-security-assessment-pptx",
+  "version": "1.0.0",
+  "description": "PPTX deck generator for the Cloud Security Assessment tool",
+  "private": true,
+  "dependencies": {
+    "pptxgenjs": "3.12.0"
+  },
+  "comment:overrides": "image-size <=2.0.2 has DoS CVEs (GHSA-5p2g-fcmc-qvqq, GHSA-w3rx-r6r6-pgpr). pptxgenjs only requires image-size ^1.2.1, which stays in the vulnerable range, so we force the patched 2.x here. pptxgenjs does not use image-size on the deck-generation path.",
+  "overrides": {
+    "image-size": "^2.0.4"
+  }
+}

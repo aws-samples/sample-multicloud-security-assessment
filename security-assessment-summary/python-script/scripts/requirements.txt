@@ -1,0 +1,6 @@
+# Python dependencies for the Cloud Security Assessment scripts.
+# Pinned to compatible major ranges for reproducible installs.
+#   pip install -r requirements.txt
+matplotlib>=3.7,<4
+numpy>=1.24,<3
+reportlab>=4.0,<5
