@@ -67,7 +67,7 @@ Parse all identified files and produce structured analysis:
 - Compliance framework coverage — reported two ways: check-level counts (every CSV
   row, summed across scopes) and a requirement-level count de-duplicated by
   REQUIREMENTS_ID. A summed row count is NOT the framework's size.
-- Security score: weighted-penalty model — `100 - (weighted_penalty / max_possible_penalty) * 100`, where each failed finding contributes its severity weight (Critical 10 / High 7 / Medium 4 / Low 2 / Info 1) and `max_possible_penalty = total_findings * 10`. Higher is better; MANUAL/INFO/MUTED are non-actionable.
+- Security score: weighted-penalty model — `100 - (weighted_penalty / max_possible_penalty) * 100`, where each failed finding contributes its severity weight (Critical 10 / High 7 / Medium 4 / Low 2 / Info 1) and `max_possible_penalty = (PASS + FAIL findings) * 10`. Only PASS and FAIL statuses enter the denominator; MANUAL/INFO/MUTED statuses do not affect the score. With no PASS or FAIL findings, the score is 0. Higher is better.
 
 **REQUIRED — ask the user up front:** Should account/subscription/project/tenancy
 identifiers be anonymized in all deliverables? If yes, pass `--anonymize`, which
