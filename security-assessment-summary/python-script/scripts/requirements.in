@@ -1,0 +1,8 @@
+# Direct Python dependencies for the Cloud Security Assessment scripts (exact, tested pins).
+# requirements.txt is generated from this file with hashes for every transitive package:
+#   pip-compile --generate-hashes --strip-extras --no-emit-index-url \
+#       --output-file=requirements.txt requirements.in
+# Install with:  pip3 install --require-hashes -r requirements.txt
+matplotlib==3.11.2
+numpy==2.5.4
+reportlab==4.5.1
