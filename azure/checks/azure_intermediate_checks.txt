@@ -1,5 +1,8 @@
-Prowler 5.43.0 (You are running the latest version, yay!)
+Prowler 5.50.0 (latest is 5.51.0, upgrade for the latest features)
 [aisearch_service_not_publicly_accessible] AI Search service has public network access disabled - aisearch [high]
+[aiservices_account_local_auth_disabled] AI services account has local (API key) authentication disabled - aiservices [high]
+[aiservices_account_public_network_access_disabled] AI services account has public network access disabled - aiservices [high]
+[aiservices_deployment_content_filter_prompt_shield_enabled] AI services model deployment blocks jailbreak attempts with Prompt Shields - aiservices [high]
 [aks_cluster_defender_enabled] AKS cluster has Microsoft Defender security profile enabled - aks [high]
 [aks_cluster_local_accounts_disabled] AKS cluster has local accounts disabled - aks [high]
 [aks_cluster_rbac_enabled] AKS cluster has RBAC enabled - aks [high]
@@ -52,6 +55,7 @@ Prowler 5.43.0 (You are running the latest version, yay!)
 [entra_security_defaults_enabled] Microsoft Entra ID tenant has Security Defaults enabled - entra [critical]
 [entra_user_with_vm_access_has_mfa] Entra ID user with VM access has multi-factor authentication enabled - entra [high]
 [iam_role_user_access_admin_restricted] Role assignment does not grant the User Access Administrator role - iam [high]
+[iam_subscription_owners_between_2_and_3] Subscription has between 2 and 3 principals assigned the Owner role - iam [high]
 [iam_subscription_roles_owner_custom_not_created] Custom role is not a subscription owner role - iam [high]
 [keyvault_access_only_through_private_endpoints] Key Vault using private endpoints has public network access disabled - keyvault [high]
 [keyvault_key_expiration_set_in_non_rbac] Key in non-RBAC Key Vault has expiration date set - keyvault [high]
@@ -91,9 +95,10 @@ Prowler 5.43.0 (You are running the latest version, yay!)
 [storage_ensure_encryption_with_customer_managed_keys] Azure Storage account uses customer-managed keys (CMKs) for encryption - storage [high]
 [storage_secure_transfer_required_is_enabled] Storage account has secure transfer required enabled - storage [high]
 [vm_backup_enabled] Virtual Machine is protected by Azure Backup - vm [high]
+[vm_emerging_threat_image] Virtual machine is not created from an image affected by a known emerging threat - vm [critical]
 [vm_ensure_using_approved_images] Virtual Machine uses an approved custom machine image - vm [high]
 [vm_ensure_using_managed_disks] Virtual Machine uses managed disks for OS and data disks - vm [high]
 [vm_linux_enforce_ssh_authentication] Linux Virtual Machine has password authentication disabled (SSH key authentication enforced) - vm [high]
 
-There are 95 available checks.
+There are 100 available checks.
 

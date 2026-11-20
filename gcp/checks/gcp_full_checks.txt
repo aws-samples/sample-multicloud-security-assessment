@@ -1,8 +1,9 @@
-Prowler 5.43.0 (You are running the latest version, yay!)
+Prowler 5.50.0 (latest is 5.51.0, upgrade for the latest features)
 [apikeys_api_restricted_with_gemini_api] API key is restricted to specific Google APIs when the Gemini (Generative Language) API is enabled - apikeys [high]
 [apikeys_api_restrictions_configured] API key is restricted to specific Google APIs - apikeys [high]
 [apikeys_key_exists] Project has no active API keys - apikeys [medium]
 [apikeys_key_rotated_in_90_days] API key was created within the last 90 days - apikeys [medium]
+[appengine_version_php_runtime_supported] App Engine serving version runs a supported PHP runtime - appengine [critical]
 [artifacts_container_analysis_enabled] GCP project has Artifact Registry Container Analysis API enabled - artifacts [medium]
 [bigquery_dataset_cmk_encryption] BigQuery dataset is encrypted with Customer-Managed Keys (CMKs) - bigquery [high]
 [bigquery_dataset_public_access] BigQuery dataset is not publicly accessible - bigquery [high]
@@ -53,6 +54,7 @@ Prowler 5.43.0 (You are running the latest version, yay!)
 [compute_instance_default_service_account_in_use_with_full_api_access] Compute Engine instance does not use the default service account with full access to all Cloud APIs - compute [medium]
 [compute_instance_deletion_protection_enabled] VM instance has deletion protection enabled - compute [medium]
 [compute_instance_disk_auto_delete_disabled] VM instance attached disks have auto-delete disabled - compute [medium]
+[compute_instance_emerging_threat_image] VM instance does not boot from an image affected by a known emerging threat - compute [critical]
 [compute_instance_encryption_with_csek_enabled] VM instance has all disks encrypted with Customer-Supplied Encryption Keys (CSEK) - compute [high]
 [compute_instance_group_autohealing_enabled] Managed Instance Group has autohealing enabled with a valid health check - compute [high]
 [compute_instance_group_load_balancer_attached] Managed Instance Group is attached to a load balancer - compute [low]
@@ -109,6 +111,11 @@ Prowler 5.43.0 (You are running the latest version, yay!)
 [logging_sink_created] Project has at least one logging sink exporting copies of all log entries - logging [medium]
 [secretmanager_secret_not_publicly_accessible] Secret Manager secret is not publicly accessible - secretmanager [critical]
 [secretmanager_secret_rotation_enabled] Secret Manager secret is rotated every 90 days or less - secretmanager [medium]
+[vertexai_workbench_instance_auto_upgrade_enabled] Vertex AI Workbench instance has automatic upgrades scheduled - vertexai [low]
+[vertexai_workbench_instance_file_download_disabled] Vertex AI Workbench instance has file downloads disabled - vertexai [medium]
+[vertexai_workbench_instance_public_ip_disabled] Vertex AI Workbench instance does not have a public IP address - vertexai [high]
+[vertexai_workbench_instance_root_access_disabled] Vertex AI Workbench instance has root access disabled - vertexai [medium]
+[vertexai_workbench_instance_terminal_access_disabled] Vertex AI Workbench instance has terminal access disabled - vertexai [medium]
 
-There are 110 available checks.
+There are 117 available checks.
 

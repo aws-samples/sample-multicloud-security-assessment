@@ -1,5 +1,14 @@
-Prowler 5.43.0 (You are running the latest version, yay!)
+Prowler 5.50.0 (latest is 5.51.0, upgrade for the latest features)
 [aisearch_service_not_publicly_accessible] AI Search service has public network access disabled - aisearch [high]
+[aiservices_account_diagnostic_logging_enabled] AI services account sends audit logs through a diagnostic setting - aiservices [medium]
+[aiservices_account_encrypted_with_cmk] AI services account is encrypted with a customer-managed key - aiservices [medium]
+[aiservices_account_local_auth_disabled] AI services account has local (API key) authentication disabled - aiservices [high]
+[aiservices_account_managed_identity_enabled] AI services account has a managed identity - aiservices [low]
+[aiservices_account_network_acls_default_action_deny] AI services account network access rules deny public traffic by default - aiservices [medium]
+[aiservices_account_outbound_network_restricted] AI services account restricts outbound network access to an allowed FQDN list - aiservices [medium]
+[aiservices_account_public_network_access_disabled] AI services account has public network access disabled - aiservices [high]
+[aiservices_account_uses_private_endpoint] AI services account has an approved private endpoint connection - aiservices [medium]
+[aiservices_deployment_content_filter_prompt_shield_enabled] AI services model deployment blocks jailbreak attempts with Prompt Shields - aiservices [high]
 [aks_cluster_auto_upgrade_enabled] AKS cluster has automatic upgrade enabled - aks [medium]
 [aks_cluster_azure_monitor_enabled] AKS cluster has Azure Monitor metrics enabled - aks [medium]
 [aks_cluster_defender_enabled] AKS cluster has Microsoft Defender security profile enabled - aks [high]
@@ -12,9 +21,9 @@ Prowler 5.43.0 (You are running the latest version, yay!)
 [app_client_certificates_on] Web app requires incoming client certificates - app [medium]
 [app_ensure_auth_is_set_up] App Service app has App Service Authentication enabled - app [medium]
 [app_ensure_http_is_redirected_to_https] App Service web app redirects HTTP to HTTPS - app [high]
-[app_ensure_java_version_is_latest] App Service web app uses the latest supported Java version or 17 by default - app [low]
-[app_ensure_php_version_is_latest] App Service web app uses the latest supported PHP version or 8.2 by default - app [low]
-[app_ensure_python_version_is_latest] App Service web app uses the latest supported Python version or 3.12 by default - app [low]
+[app_ensure_java_version_is_latest] App Service web app runs a supported Java version (17 or newer by default) - app [low]
+[app_ensure_php_version_is_latest] App Service web app runs a supported PHP version (8.5 or newer by default) - app [low]
+[app_ensure_python_version_is_latest] App Service web app runs a supported Python version (3.12 or newer by default) - app [low]
 [app_ensure_using_http20] App Service web app has HTTP/2.0 enabled - app [low]
 [app_ftp_deployment_disabled] App Service web app has FTP disabled or FTPS-only enforced - app [high]
 [app_function_access_keys_configured] Function app has function keys configured - app [high]
@@ -91,6 +100,7 @@ Prowler 5.43.0 (You are running the latest version, yay!)
 [entra_users_cannot_create_microsoft_365_groups] Microsoft 365 group creation by users is disabled - entra [medium]
 [iam_custom_role_has_permissions_to_administer_resource_locks] Custom role has permission to administer resource locks - iam [medium]
 [iam_role_user_access_admin_restricted] Role assignment does not grant the User Access Administrator role - iam [high]
+[iam_subscription_owners_between_2_and_3] Subscription has between 2 and 3 principals assigned the Owner role - iam [high]
 [iam_subscription_roles_owner_custom_not_created] Custom role is not a subscription owner role - iam [high]
 [keyvault_access_only_through_private_endpoints] Key Vault using private endpoints has public network access disabled - keyvault [high]
 [keyvault_key_expiration_set_in_non_rbac] Key in non-RBAC Key Vault has expiration date set - keyvault [high]
@@ -123,6 +133,8 @@ Prowler 5.43.0 (You are running the latest version, yay!)
 [mysql_flexible_server_high_availability_enabled] MySQL flexible server has high availability enabled - mysql [medium]
 [mysql_flexible_server_minimum_tls_version_12] MySQL flexible server enforces TLS 1.2 or higher - mysql [high]
 [mysql_flexible_server_ssl_connection_enabled] MySQL Flexible Server enforces SSL connections - mysql [high]
+[network_application_gateway_http2_enabled] Application Gateway has HTTP/2 enabled - network [low]
+[network_application_gateway_waf_enabled] Application Gateway has an enabled Web Application Firewall policy associated - network [medium]
 [network_bastion_host_exists] Azure subscription has at least one Bastion Host - network [medium]
 [network_flow_log_captured_sent] Network Watcher has flow logs enabled and sent to a Log Analytics workspace - network [high]
 [network_flow_log_more_than_90_days] Network Watcher has all flow logs enabled with retention set to 0 or at least 90 days - network [medium]
@@ -180,6 +192,7 @@ Prowler 5.43.0 (You are running the latest version, yay!)
 [storage_smb_protocol_version_is_latest] Storage account allows only the latest SMB protocol version for file shares - storage [medium]
 [vm_backup_enabled] Virtual Machine is protected by Azure Backup - vm [high]
 [vm_desired_sku_size] Virtual Machine uses an organization-approved SKU size - vm [medium]
+[vm_emerging_threat_image] Virtual machine is not created from an image affected by a known emerging threat - vm [critical]
 [vm_ensure_attached_disks_encrypted_with_cmk] Virtual Machine OS or data disk is encrypted with a customer-managed key (CMK) - vm [medium]
 [vm_ensure_unattached_disks_encrypted_with_cmk] Unattached disk is encrypted with a customer-managed key (CMK) - vm [medium]
 [vm_ensure_using_approved_images] Virtual Machine uses an approved custom machine image - vm [high]
@@ -191,5 +204,5 @@ Prowler 5.43.0 (You are running the latest version, yay!)
 [vm_sufficient_daily_backup_retention_period] Virtual Machine has a backup policy with a daily retention period meeting the configured minimum - vm [medium]
 [vm_trusted_launch_enabled] Virtual Machine has Trusted Launch with Secure Boot and vTPM enabled - vm [medium]
 
-There are 191 available checks.
+There are 204 available checks.
 

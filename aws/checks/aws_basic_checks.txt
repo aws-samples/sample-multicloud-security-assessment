@@ -1,4 +1,4 @@
-Prowler 5.43.0 (You are running the latest version, yay!)
+Prowler 5.50.0 (latest is 5.51.0, upgrade for the latest features)
 [account_maintain_current_contact_details] AWS account contact information is current - account [medium]
 [awslambda_function_using_supported_runtimes] Lambda function uses a supported runtime - awslambda [medium]
 [cloudtrail_multi_region_enabled] Region has at least one CloudTrail trail logging - cloudtrail [high]

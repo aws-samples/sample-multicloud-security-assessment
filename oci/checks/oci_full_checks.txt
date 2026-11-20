@@ -1,4 +1,4 @@
-Prowler 5.43.0 (You are running the latest version, yay!)
+Prowler 5.50.0 (latest is 5.51.0, upgrade for the latest features)
 [analytics_instance_access_restricted] Oracle Analytics Cloud instance is deployed within a Virtual Cloud Network or restricts public access to allowed sources - analytics [high]
 [audit_log_retention_period_365_days] Tenancy audit log retention period is 365 days or greater - audit [medium]
 [blockstorage_block_volume_encrypted_with_cmk] Block volume is encrypted with a Customer Managed Key (CMK) - blockstorage [medium]

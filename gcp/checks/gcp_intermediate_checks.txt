@@ -1,6 +1,7 @@
-Prowler 5.43.0 (You are running the latest version, yay!)
+Prowler 5.50.0 (latest is 5.51.0, upgrade for the latest features)
 [apikeys_api_restricted_with_gemini_api] API key is restricted to specific Google APIs when the Gemini (Generative Language) API is enabled - apikeys [high]
 [apikeys_api_restrictions_configured] API key is restricted to specific Google APIs - apikeys [high]
+[appengine_version_php_runtime_supported] App Engine serving version runs a supported PHP runtime - appengine [critical]
 [bigquery_dataset_cmk_encryption] BigQuery dataset is encrypted with Customer-Managed Keys (CMKs) - bigquery [high]
 [bigquery_dataset_public_access] BigQuery dataset is not publicly accessible - bigquery [high]
 [bigquery_table_cmk_encryption] BigQuery table is encrypted with a Customer-Managed Key (CMK) - bigquery [high]
@@ -18,6 +19,7 @@ Prowler 5.43.0 (You are running the latest version, yay!)
 [cloudstorage_bucket_public_access] Cloud Storage bucket is not publicly accessible - cloudstorage [critical]
 [compute_firewall_rdp_access_from_the_internet_allowed] Firewall rule does not allow ingress from 0.0.0.0/0 to TCP port 3389 (RDP) - compute [critical]
 [compute_firewall_ssh_access_from_the_internet_allowed] Firewall does not expose TCP port 22 (SSH) to the Internet - compute [critical]
+[compute_instance_emerging_threat_image] VM instance does not boot from an image affected by a known emerging threat - compute [critical]
 [compute_instance_encryption_with_csek_enabled] VM instance has all disks encrypted with Customer-Supplied Encryption Keys (CSEK) - compute [high]
 [compute_instance_group_autohealing_enabled] Managed Instance Group has autohealing enabled with a valid health check - compute [high]
 [compute_instance_public_ip] VM instance does not have a public IP address - compute [high]
@@ -29,6 +31,7 @@ Prowler 5.43.0 (You are running the latest version, yay!)
 [iam_workload_identity_pool_provider_attribute_condition] Workload Identity Federation providers trusting a multi-tenant issuer enforce an attribute condition - iam [high]
 [kms_key_not_publicly_accessible] Cloud KMS key has no public IAM access - kms [high]
 [secretmanager_secret_not_publicly_accessible] Secret Manager secret is not publicly accessible - secretmanager [critical]
+[vertexai_workbench_instance_public_ip_disabled] Vertex AI Workbench instance does not have a public IP address - vertexai [high]
 
-There are 30 available checks.
+There are 33 available checks.
 

@@ -1,4 +1,4 @@
-Prowler 5.43.0 (You are running the latest version, yay!)
+Prowler 5.50.0 (latest is 5.51.0, upgrade for the latest features)
 [analytics_instance_access_restricted] Oracle Analytics Cloud instance is deployed within a Virtual Cloud Network or restricts public access to allowed sources - analytics [high]
 [cloudguard_enabled] Cloud Guard is enabled in the root compartment of the tenancy - cloudguard [high]
 [compute_instance_in_transit_encryption_enabled] Compute instance has in-transit encryption enabled - compute [high]
