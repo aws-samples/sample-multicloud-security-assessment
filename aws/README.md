@@ -192,6 +192,8 @@ The template also creates `ProwlerAdditionsPolicy`, a customer-managed policy wi
 - `securityhub:BatchImportFindings`, scoped to the Prowler Security Hub product ARN and the current target account
 - API Gateway read access for REST and HTTP API checks
 
+`ProwlerAdditionsPolicy` mirrors upstream Prowler's [`permissions/prowler-additions-policy.json`](https://github.com/prowler-cloud/prowler/blob/master/permissions/prowler-additions-policy.json) for the pinned `ProwlerVersion`. The [Prowler Permissions Check](../README.md#prowler-permissions-check) workflow fails any PR whose templates are missing an upstream permission. Intentional differences are listed in [`prowler-permissions-exceptions.json`](prowler-permissions-exceptions.json).
+
 #### Deployment Options
 
 **Option 1: StackSet Deployment (Recommended for Organizations)**
@@ -788,7 +790,7 @@ aws organizations describe-organization
 
 ### Regular Tasks
 
-1. **Update Prowler version**: Controlled by the `ProwlerVersion` parameter; update the tested default after validating a newer Prowler release
+1. **Update Prowler version**: Controlled by the `ProwlerVersion` parameter; update the tested default after validating a newer Prowler release. Run `python scripts/check_prowler_permissions.py` from the repository root to confirm `ProwlerAdditionsPolicy` still covers that release's permissions (see [Prowler Permissions Check](../README.md#prowler-permissions-check))
 2. **Review scan results**: Set up regular review processes
 3. **Update email notifications**: Keep contact information current
 4. **Monitor costs**: Review AWS billing for optimization opportunities

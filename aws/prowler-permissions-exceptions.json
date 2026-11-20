@@ -1,0 +1,9 @@
+{
+  "description": "Intentional differences between ProwlerAdditionsPolicy and upstream Prowler's permissions/prowler-additions-policy.json. Checked by scripts/check_prowler_permissions.py; every entry needs a reason and is reported as stale once it is no longer needed.",
+  "exceptions": [
+    {
+      "action": "securityhub:BatchImportFindings",
+      "reason": "Upstream grants this on Resource '*'. The templates scope it to the Prowler Security Hub product ARN with a securityhub:TargetAccount condition for the deploying account."
+    }
+  ]
+}

@@ -21,6 +21,7 @@
 - [Cleanup / Uninstall](#cleanup--uninstall)
 - [Cost Considerations](#cost-considerations)
 - [Security Best Practices](#security-best-practices)
+- [Continuous Integration](#continuous-integration)
 - [Contributing](#contributing)
 - [License](#license)
 - [Support](#support)
@@ -62,6 +63,7 @@ Pick the template for the cloud you want to scan and deploy it. To cover more th
 │   ├── 2-codebuild-prowler-aws.yaml      # AWS scanning
 │   ├── aws-assessment-architecture.drawio # Editable architecture source
 │   ├── README.md                         # AWS deployment guide
+│   ├── prowler-permissions-exceptions.json # Documented deviations from upstream Prowler IAM permissions
 │   └── checks/                           # Prowler AWS checks listing
 ├── azure/                                # Azure-specific templates
 │   ├── codebuild-prowler-azure.yaml      # Azure scanning
@@ -78,7 +80,10 @@ Pick the template for the cloud you want to scan and deploy it. To cover more th
 │   ├── oci-assessment-architecture.drawio # Editable architecture source
 │   ├── README.md                         # OCI deployment guide
 │   └── checks/                           # Prowler OCI checks listing
-└── img/                                  # README architecture diagram exports
+├── img/                                  # README architecture diagram exports
+├── scripts/                              # Maintenance scripts (Prowler permissions check)
+├── tests/                                # Unit tests for maintenance scripts
+└── .github/workflows/                    # CI workflows (see Continuous Integration)
 ```
 
 ## Documentation
@@ -542,6 +547,50 @@ When the assessment is complete, delete resources that are no longer needed by f
 - **Encryption**: S3 report buckets explicitly use SSE-S3 encryption; external-provider credentials and optional SNS notification topics are encrypted with stack-managed AWS KMS keys
 - **Build Environment**: CodeBuild runs scans in ephemeral AWS-managed containers. The projects are not attached to a VPC and require outbound network access to download dependencies and call cloud-provider APIs
 - **Audit Trail**: AWS control-plane activity is available through CloudTrail, and Lambda/CodeBuild scan execution logs are written to CloudWatch Logs
+
+## Continuous Integration
+
+GitHub Actions workflows in [`.github/workflows/`](.github/workflows/) run on pull requests to `main`. Every workflow can also be started manually from the **Actions** tab except **Labeler**.
+
+| Workflow | File | Runs on | What it does |
+| -------- | ---- | ------- | ------------ |
+| **CloudFormation Lint** | [`cfn-lint.yml`](.github/workflows/cfn-lint.yml) | PRs changing `*.yaml`/`*.yml` | Finds every CloudFormation template in the repository and lints it with a pinned `cfn-lint`. |
+| **Prowler Permissions Check** | [`prowler-permissions.yml`](.github/workflows/prowler-permissions.yml) | Every PR | Confirms `ProwlerAdditionsPolicy` grants every permission upstream Prowler requires for the pinned `ProwlerVersion`. See [Prowler Permissions Check](#prowler-permissions-check). |
+| **ASH Security Scan** | [`ash-security-scan.yml`](.github/workflows/ash-security-scan.yml) | PRs changing YAML, JSON, shell, or Markdown files | Runs [Automated Security Helper (ASH)](https://github.com/awslabs/automated-security-helper) on the changed files and posts the output to the job summary. |
+| **ASH Full Repository Scan** | [`ash-full-repository-scan.yml`](.github/workflows/ash-full-repository-scan.yml) | Pushes to `main`, monthly (1st, 02:00 UTC) | Runs ASH on the whole repository and uploads the log as a build artifact kept for 30 days. |
+| **Labeler** | [`label.yml`](.github/workflows/label.yml) | Every PR | Applies `aws`, `azure`, `gcp`, `oci`, `cloudformation`, and `checks` labels based on [`.github/labeler.yml`](.github/labeler.yml). |
+
+The ASH workflows report findings without failing the build. Review their job summaries on each PR.
+
+### Prowler Permissions Check
+
+Prowler needs read-only permissions beyond the `SecurityAudit` and `ViewOnlyAccess` managed policies. It publishes them for each release in [`permissions/prowler-additions-policy.json`](https://github.com/prowler-cloud/prowler/blob/master/permissions/prowler-additions-policy.json). Both AWS templates keep a copy of these permissions in `ProwlerAdditionsPolicy`. When a PR bumps `ProwlerVersion`, the copies must gain any permissions the new release added. Otherwise the new checks fail with `AccessDenied`.
+
+[`scripts/check_prowler_permissions.py`](scripts/check_prowler_permissions.py) enforces this. It:
+
+1. Reads the `ProwlerVersion` default from `aws/2-codebuild-prowler-aws.yaml`. The default must be a pinned `X.Y.Z` release.
+2. Downloads Prowler's policy file at that release tag and logs its SHA-256. If the download fails, the check fails.
+3. Fails if `ProwlerAdditionsPolicy` in `aws/1-member-roles-aws.yaml` or `aws/2-codebuild-prowler-aws.yaml` lacks any upstream action or resource. IAM wildcards count, so `bedrock:Get*` covers `bedrock:GetModel`. The failure output lists the exact lines to add.
+4. Fails if the two policy copies differ, or if `ProwlerMemberRole` no longer attaches `SecurityAudit` and `ViewOnlyAccess`.
+5. Fails on stale exceptions: an exception for an action that upstream removed or that the templates now fully grant.
+
+Actions that the templates grant but upstream doesn't list are reported for information only. The check never edits templates, because IAM changes need human review.
+
+**Intentional differences** from upstream go in [`aws/prowler-permissions-exceptions.json`](aws/prowler-permissions-exceptions.json), and each one needs a reason. For example, `securityhub:BatchImportFindings` is limited here to the Prowler Security Hub product in the deploying account, while upstream grants it on `*`.
+
+**Run it locally** before opening a PR that bumps Prowler or changes the policy:
+
+```bash
+pip install "PyYAML==6.0.2"
+python -m unittest discover -s tests -p "test_check_prowler_permissions.py"
+python scripts/check_prowler_permissions.py
+# Compare against a different release without changing the templates
+python scripts/check_prowler_permissions.py --version 5.51.0
+```
+
+To block merges when the check fails, a repository admin must add the `prowler-permissions` job (workflow **Prowler Permissions Check**) as a required status check in the branch protection rules for `main`. The workflow runs on every PR, so as a required check it never stays pending.
+
+Prowler publishes machine-readable permissions for AWS only. When you bump the Azure, GCP, or OCI templates, review Prowler's release notes for new required roles, scopes, or APIs.
 
 ## Contributing
 
