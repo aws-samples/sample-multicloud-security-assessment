@@ -199,6 +199,8 @@ gcloud services enable compute.googleapis.com
 gcloud services enable storage.googleapis.com
 gcloud services enable cloudasset.googleapis.com
 gcloud services enable securitycenter.googleapis.com
+gcloud services enable notebooks.googleapis.com    # vertexai_workbench_instance_* checks
+gcloud services enable appengine.googleapis.com    # appengine_* checks
 ```
 
 For organization-wide scanning, also enable the Cloud Asset API in the project that owns the scanner service account:

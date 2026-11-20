@@ -57,6 +57,20 @@ Resources:
               - appstream:List*
               - backup:List*
               - backup:Get*
+              - bedrock-agentcore:GetAgentRuntime
+              - bedrock-agentcore:GetBrowser
+              - bedrock-agentcore:GetCodeInterpreter
+              - bedrock-agentcore:GetGateway
+              - bedrock-agentcore:GetGatewayTarget
+              - bedrock-agentcore:GetMemory
+              - bedrock-agentcore:GetTokenVault
+              - bedrock-agentcore:ListAgentRuntimes
+              - bedrock-agentcore:ListBrowsers
+              - bedrock-agentcore:ListCodeInterpreters
+              - bedrock-agentcore:ListGatewayTargets
+              - bedrock-agentcore:ListGateways
+              - bedrock-agentcore:ListMemories
+              - bedrock-agentcore:ListTagsForResource
               - bedrock:List*
               - bedrock:Get*
               - cloudtrail:GetInsightSelectors
@@ -78,16 +92,24 @@ Resources:
               - ec2:GetInstanceMetadataDefaults
               - ecr:Describe*
               - ecr:GetRegistryScanningConfiguration
+              - ecr:BatchGetImage
+              - ecr:GetDownloadUrlForLayer
               - elasticfilesystem:DescribeBackupPolicy
               - glue:GetConnections
               - glue:GetSecurityConfiguration*
               - glue:SearchTables
               - glue:GetMLTransforms
+              - inspector2:BatchGetFindingDetails
+              - inspector2:SearchVulnerabilities
               - lambda:GetFunction*
+              - lambda:GetLayerVersion
               - lightsail:GetRelationalDatabases
               - logs:FilterLogEvents
               - macie2:GetMacieSession
               - macie2:GetAutomatedDiscoveryConfiguration
+              - oam:GetSinkPolicy
+              - oam:ListTagsForResource
+              - rolesanywhere:ListProfiles
               - rolesanywhere:ListTagsForResource
               - rolesanywhere:ListTrustAnchors
               - s3:GetAccountPublicAccessBlock
@@ -120,6 +142,8 @@ Resources:
             Resource:
               - !Sub arn:${AWS::Partition}:apigateway:*::/restapis/*
               - !Sub arn:${AWS::Partition}:apigateway:*::/apis/*
+              - !Sub arn:${AWS::Partition}:apigateway:*::/domainnames
+              - !Sub arn:${AWS::Partition}:apigateway:*::/domainnames/*
 
 Outputs:
   ProwlerMemberRoleArn:
