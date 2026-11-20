@@ -1,12 +1,11 @@
 name: CloudFormation Lint
 
 on:
+  # No paths filter on purpose: this is a required status check on main, and a
+  # path-filtered required check stays pending on PRs that skip it. Linting
+  # every template takes only a few seconds.
   pull_request:
     branches: [main]
-    paths:
-      - "**/*.yaml"
-      - "**/*.yml"
-      - ".github/workflows/cfn-lint.yml"
   workflow_dispatch:
 
 permissions:
