@@ -556,7 +556,7 @@ GitHub Actions workflows in [`.github/workflows/`](.github/workflows/) run on pu
 | -------- | ---- | ------- | ------------ |
 | **CloudFormation Lint** | [`cfn-lint.yml`](.github/workflows/cfn-lint.yml) | PRs changing `*.yaml`/`*.yml` | Finds every CloudFormation template in the repository and lints it with a pinned `cfn-lint`. |
 | **Prowler Permissions Check** | [`prowler-permissions.yml`](.github/workflows/prowler-permissions.yml) | Every PR | Confirms `ProwlerAdditionsPolicy` grants every permission upstream Prowler requires for the pinned `ProwlerVersion`. See [Prowler Permissions Check](#prowler-permissions-check). |
-| **ASH Security Scan** | [`ash-security-scan.yml`](.github/workflows/ash-security-scan.yml) | PRs changing YAML, JSON, shell, or Markdown files | Runs [Automated Security Helper (ASH)](https://github.com/awslabs/automated-security-helper) on the changed files and posts the output to the job summary. |
+| **ASH Security Scan** | [`ash-security-scan.yml`](.github/workflows/ash-security-scan.yml) | PRs changing YAML, JSON, or shell files | Runs [Automated Security Helper (ASH)](https://github.com/awslabs/automated-security-helper) on the changed files and posts the output to the job summary. Documentation-only PRs skip it; the full repository scan covers Markdown after merge. |
 | **ASH Full Repository Scan** | [`ash-full-repository-scan.yml`](.github/workflows/ash-full-repository-scan.yml) | Pushes to `main`, monthly (1st, 02:00 UTC) | Runs ASH on the whole repository and uploads the log as a build artifact kept for 30 days. |
 | **Labeler** | [`label.yml`](.github/workflows/label.yml) | Every PR | Applies `aws`, `azure`, `gcp`, `oci`, `cloudformation`, and `checks` labels based on [`.github/labeler.yml`](.github/labeler.yml). |
 
@@ -588,7 +588,7 @@ python scripts/check_prowler_permissions.py
 python scripts/check_prowler_permissions.py --version 5.51.0
 ```
 
-To block merges when the check fails, a repository admin must add the `prowler-permissions` job (workflow **Prowler Permissions Check**) as a required status check in the branch protection rules for `main`. The workflow runs on every PR, so as a required check it never stays pending.
+The `main-protection` repository ruleset makes `prowler-permissions` a required status check, so a PR can't merge into `main` until the check passes. The workflow runs on every PR with no paths filter on purpose: a path-filtered required check stays pending on PRs that skip it. CloudFormation Lint runs only when YAML files change, so it isn't a required check.
 
 Prowler publishes machine-readable permissions for AWS only. When you bump the Azure, GCP, or OCI templates, review Prowler's release notes for new required roles, scopes, or APIs.
 

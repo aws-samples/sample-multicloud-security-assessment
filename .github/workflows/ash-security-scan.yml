@@ -8,7 +8,6 @@ on:
       - "**/*.yml"
       - "**/*.json"
       - "**/*.sh"
-      - "**/*.md"
       - ".github/workflows/ash-security-scan.yml"
   workflow_dispatch:
 
@@ -33,7 +32,6 @@ jobs:
             **/*.yml
             **/*.json
             **/*.sh
-            **/*.md
 
       - name: Set up Python
         if: steps.changed-files.outputs.any_changed == 'true'
