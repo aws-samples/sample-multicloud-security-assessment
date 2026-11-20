@@ -588,7 +588,7 @@ python scripts/check_prowler_permissions.py
 python scripts/check_prowler_permissions.py --version 5.51.0
 ```
 
-To block merges when the check fails, a repository admin must add the `prowler-permissions` job (workflow **Prowler Permissions Check**) as a required status check in the branch protection rules for `main`. The workflow runs on every PR, so as a required check it never stays pending.
+The `main-protection` repository ruleset makes `prowler-permissions` a required status check, so a PR can't merge into `main` until the check passes. The workflow runs on every PR with no paths filter on purpose: a path-filtered required check stays pending on PRs that skip it. CloudFormation Lint runs only when YAML files change, so it isn't a required check.
 
 Prowler publishes machine-readable permissions for AWS only. When you bump the Azure, GCP, or OCI templates, review Prowler's release notes for new required roles, scopes, or APIs.
 
