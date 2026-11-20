@@ -1,0 +1,40 @@
+name: Prowler Permissions Check
+
+# Fails when ProwlerAdditionsPolicy in the AWS templates does not grant every
+# permission listed in upstream Prowler's permissions/prowler-additions-policy.json
+# for the pinned ProwlerVersion, so a version bump cannot merge with missing
+# permissions.
+
+on:
+  # No paths filter on purpose: this can be a required status check, and a
+  # path-filtered required check stays pending on PRs that skip it. The job
+  # takes well under a minute.
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prowler-permissions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        # Pin for reproducible runs; bump deliberately when adopting a new release.
+        run: pip install "PyYAML==6.0.2"
+
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -p "test_check_prowler_permissions.py" -v
+
+      - name: Compare ProwlerAdditionsPolicy with upstream Prowler
+        run: python scripts/check_prowler_permissions.py
