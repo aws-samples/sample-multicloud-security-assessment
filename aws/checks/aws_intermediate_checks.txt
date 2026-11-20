@@ -1,4 +1,4 @@
-Prowler 5.43.0 (You are running the latest version, yay!)
+Prowler 5.50.0 (latest is 5.51.0, upgrade for the latest features)
 [acm_certificates_expiration_check] ACM certificate expires in more than the configured threshold of days - acm [high]
 [acm_certificates_with_secure_key_algorithms] ACM certificate uses a secure key algorithm - acm [high]
 [amplify_app_no_secrets_in_environment] Amplify app has no sensitive credentials in environment variables or build settings - amplify [high]
@@ -22,10 +22,15 @@ Prowler 5.43.0 (You are running the latest version, yay!)
 [bedrock_custom_model_encrypted_with_cmk] Bedrock custom model is encrypted with a customer-managed KMS key - bedrock [critical]
 [bedrock_full_access_policy_attached] IAM role does not have AmazonBedrockFullAccess managed policy attached - bedrock [high]
 [bedrock_guardrail_contextual_grounding_filter_enabled] Bedrock guardrail blocks ungrounded and irrelevant model responses - bedrock [high]
+[bedrock_guardrail_iam_condition_enforcement_enabled] IAM policy allowing Bedrock model invocation requires a guardrail through the bedrock:GuardrailIdentifier condition key - bedrock [high]
 [bedrock_guardrail_prompt_attack_filter_enabled] Amazon Bedrock guardrail has prompt attack filter strength set to HIGH - bedrock [high]
 [bedrock_guardrail_sensitive_information_filter_enabled] Amazon Bedrock guardrail blocks or masks sensitive information - bedrock [high]
+[bedrock_guardrail_sensitive_information_filter_enforced] Amazon Bedrock guardrail sensitive information filter acts on the output path - bedrock [high]
 [bedrock_knowledge_base_encrypted_with_cmk] Bedrock knowledge base data source is encrypted with a customer-managed KMS key - bedrock [high]
+[bedrock_model_invocation_job_output_encrypted_with_cmk] Bedrock model invocation job output is encrypted with a customer-managed KMS key - bedrock [high]
 [bedrock_model_invocation_logs_encryption_enabled] Amazon Bedrock model invocation logs are encrypted in the S3 bucket and KMS-encrypted in the CloudWatch log group - bedrock [high]
+[bedrockagentcore_full_access_policy_attached] IAM role does not have the AWS-managed Bedrock AgentCore full access policies attached - bedrockagentcore [high]
+[bedrockagentcore_payments_process_payment_role_separation] IAM role does not both open and execute Bedrock AgentCore payments - bedrockagentcore [high]
 [cloudformation_stack_cdktoolkit_bootstrap_version] CDKToolkit CloudFormation stack has Bootstrap version 21 or higher - cloudformation [high]
 [cloudformation_stack_outputs_find_secrets] CloudFormation stack outputs do not contain secrets - cloudformation [critical]
 [cloudfront_distributions_default_root_object] CloudFront distribution has a default root object configured - cloudfront [high]
@@ -37,6 +42,7 @@ Prowler 5.43.0 (You are running the latest version, yay!)
 [cloudtrail_threat_detection_privilege_escalation] No potential privilege escalation activity detected in CloudTrail - cloudtrail [critical]
 [cloudwatch_alarm_actions_alarm_state_configured] CloudWatch metric alarm has actions configured for the ALARM state - cloudwatch [high]
 [cloudwatch_alarm_actions_enabled] CloudWatch metric alarm has actions enabled - cloudwatch [high]
+[cloudwatch_log_group_data_protection_policy_configured] CloudWatch Log Groups have a data protection policy configured - cloudwatch [high]
 [cloudwatch_log_group_not_publicly_accessible] CloudWatch Log Group is not publicly accessible - cloudwatch [high]
 [codeartifact_packages_external_public_publishing_disabled] Internal CodeArtifact package does not allow publishing versions already present in external public sources - codeartifact [critical]
 [codebuild_project_no_secrets_in_variables] CodeBuild project has no sensitive credentials in plaintext environment variables - codebuild [critical]
@@ -61,6 +67,7 @@ Prowler 5.43.0 (You are running the latest version, yay!)
 [ec2_ebs_volume_encryption] EBS volume is encrypted - ec2 [high]
 [ec2_ebs_volume_snapshots_exists] EBS volume has at least one snapshot - ec2 [high]
 [ec2_instance_account_imdsv2_enabled] IMDSv2 is required by default for EC2 instances at the account level - ec2 [high]
+[ec2_instance_emerging_threat_image] EC2 instance does not run an AMI affected by a known emerging threat - ec2 [critical]
 [ec2_instance_imdsv2_enabled] EC2 instance requires IMDSv2 or has the instance metadata service disabled - ec2 [high]
 [ec2_instance_internet_facing_with_instance_profile] EC2 instance is not internet-facing with an instance profile attached - ec2 [high]
 [ec2_instance_port_cassandra_exposed_to_internet] EC2 instance does not have Cassandra ports (TCP 7000, 7001, 7199, 9042, 9160) open to the Internet - ec2 [critical]
@@ -125,6 +132,7 @@ Prowler 5.43.0 (You are running the latest version, yay!)
 [elasticbeanstalk_environment_cloudwatch_logging_enabled] Elastic Beanstalk environment streams logs to CloudWatch Logs - elasticbeanstalk [high]
 [elasticbeanstalk_environment_managed_updates_enabled] Elastic Beanstalk environment has managed platform updates enabled - elasticbeanstalk [high]
 [elasticbeanstalk_environment_no_secrets_in_configuration] Elastic Beanstalk environment configuration has no hardcoded secrets - elasticbeanstalk [high]
+[elasticbeanstalk_environment_php_platform_updated] Elastic Beanstalk PHP environment runs a platform version with the fixed PHP release - elasticbeanstalk [critical]
 [emr_cluster_account_public_block_enabled] EMR account has Block Public Access enabled - emr [high]
 [eventbridge_bus_cross_account_access] AWS EventBridge event bus does not allow cross-account access - eventbridge [high]
 [eventbridge_bus_exposed] AWS EventBridge event bus policy does not allow public access - eventbridge [high]
@@ -186,6 +194,7 @@ Prowler 5.43.0 (You are running the latest version, yay!)
 [kms_key_enclave_debug_attestation_detected] No Nitro Enclave debug-mode attestation observed against this KMS key - kms [high]
 [kms_key_not_publicly_accessible] Cloud KMS key does not grant access to allUsers or allAuthenticatedUsers - kms [critical]
 [lightsail_database_public] Lightsail database public access disabled - lightsail [high]
+[lightsail_instance_php_blueprint_updated] Lightsail instance created from a PHP blueprint runs a fixed PHP release - lightsail [high]
 [lightsail_instance_public] Lightsail instance has no publicly accessible ports - lightsail [high]
 [macie_automated_sensitive_data_discovery_enabled] Macie automated sensitive data discovery is enabled - macie [high]
 [mq_broker_not_publicly_accessible] Amazon MQ broker is not publicly accessible - mq [high]
@@ -196,6 +205,7 @@ Prowler 5.43.0 (You are running the latest version, yay!)
 [networkfirewall_policy_default_action_fragmented_packets] Network Firewall policy drops or forwards fragmented packets by default - networkfirewall [high]
 [networkfirewall_policy_default_action_full_packets] Network Firewall firewall policy default stateless action for full packets is drop or forward - networkfirewall [high]
 [networkfirewall_policy_rule_group_associated] Network Firewall policy has at least one rule group associated - networkfirewall [high]
+[oam_sink_not_publicly_accessible] Observability Access Manager sink does not allow any AWS account to link to it - oam [high]
 [opensearch_service_domains_access_control_enabled] Amazon OpenSearch Service domain has fine-grained access control enabled - opensearch [high]
 [opensearch_service_domains_audit_logging_enabled] Amazon OpenSearch Service domain has audit logging enabled - opensearch [high]
 [opensearch_service_domains_encryption_at_rest_enabled] Amazon OpenSearch Service domain has encryption at rest enabled - opensearch [critical]
@@ -205,6 +215,7 @@ Prowler 5.43.0 (You are running the latest version, yay!)
 [opensearch_service_domains_updated_to_the_latest_service_software_version] Amazon OpenSearch Service domain is updated to the latest service software version - opensearch [high]
 [organizations_delegated_administrators] AWS Organization has only trusted delegated administrators - organizations [critical]
 [organizations_scp_check_deny_regions] AWS Organization restricts operations to only the configured AWS Regions with SCP policies - organizations [high]
+[organizations_security_services_delegated_admin_not_management_account] AWS Organization security services are administered from a delegated administrator account and not from the management account - organizations [high]
 [rds_cluster_protected_by_backup_plan] RDS cluster is protected by an AWS Backup plan - rds [high]
 [rds_cluster_storage_encrypted] RDS cluster storage is encrypted - rds [high]
 [rds_instance_certificate_expiration] RDS instance SSL/TLS certificate has more than 3 months of validity remaining - rds [high]
@@ -264,5 +275,5 @@ Prowler 5.43.0 (You are running the latest version, yay!)
 [workspaces_volume_encryption_enabled] Amazon WorkSpaces workspace root and user volumes are encrypted - workspaces [high]
 [workspaces_vpc_2private_1public_subnets_nat] Workspace is in a private subnet and its VPC has at least 1 public subnet, 2 private subnets, and a NAT Gateway - workspaces [high]
 
-There are 264 available checks.
+There are 275 available checks.
 
