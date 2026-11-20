@@ -13,6 +13,7 @@
 - [Documentation](#documentation)
 - [Architecture](#architecture)
 - [Deployment](#deployment)
+- [Upgrading Existing Deployments](#upgrading-existing-deployments)
 - [Running Scans](#running-scans)
 - [Results and Reporting](#results-and-reporting)
 - [Ongoing Security Monitoring](#ongoing-security-monitoring)
@@ -260,6 +261,73 @@ aws cloudformation deploy \
     OCIPrivateKey="$(jq -Rs . < ~/.oci/oci_api_key.pem)" \
     OCIRegion=us-ashburn-1
 ```
+
+## Upgrading Existing Deployments
+
+Each release of this repository pins a tested Prowler version as the `ProwlerVersion` default and may update the IAM permissions, check lists, or setup steps that version needs. To upgrade an existing deployment, pull the latest repository changes and redeploy the templates. Changing only the `ProwlerVersion` parameter on an existing stack does not apply template changes such as new IAM permissions.
+
+When updating an existing stack, `aws cloudformation deploy` keeps the parameter values already stored on the stack, including `ProwlerVersion`. A new template default therefore does not take effect, so pass `ProwlerVersion` explicitly. Other parameters, including credentials, keep their current values unless you override them.
+
+### AWS Multi-Account Member Roles
+
+If you scan multiple accounts, update the member-role StackSet from the management account first so every member account receives the updated `ProwlerAdditionsPolicy`:
+
+```bash
+aws cloudformation update-stack-set \
+  --stack-set-name aws-prowler-member-roles \
+  --template-body file://aws/1-member-roles-aws.yaml \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --parameters ParameterKey=ProwlerAccountID,UsePreviousValue=true \
+  --profile management
+```
+
+Wait for the StackSet operation to succeed. If you deployed the management account role directly, update that stack as well:
+
+```bash
+aws cloudformation deploy \
+  --template-file aws/1-member-roles-aws.yaml \
+  --stack-name aws-prowler-management-account-role \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --profile management
+```
+
+### Scanner Stacks
+
+Redeploy each scanner stack you use with the target Prowler version. Replace `<version>` with the `ProwlerVersion` default from the template, for example `5.50.0`:
+
+```bash
+# AWS (add --profile prowler-admin for multi-account deployments)
+aws cloudformation deploy \
+  --template-file aws/2-codebuild-prowler-aws.yaml \
+  --stack-name aws-prowler-scanner \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --parameter-overrides ProwlerVersion=<version>
+
+# Azure
+aws cloudformation deploy \
+  --template-file azure/codebuild-prowler-azure.yaml \
+  --stack-name azure-prowler-scanner \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --parameter-overrides ProwlerVersion=<version>
+
+# GCP
+aws cloudformation deploy \
+  --template-file gcp/codebuild-prowler-gcp.yaml \
+  --stack-name gcp-prowler-scanner \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --parameter-overrides ProwlerVersion=<version>
+
+# OCI
+aws cloudformation deploy \
+  --template-file oci/codebuild-prowler-oci.yaml \
+  --stack-name oci-prowler-scanner \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --parameter-overrides ProwlerVersion=<version>
+```
+
+For GCP, also enable any newly required APIs in each scanned project. See [Enable Required APIs](gcp/README.md#4-enable-required-apis).
+
+Stack updates do not start a scan. The initial scan runs only when a stack is created, so start a [manual rerun](#manual-rerun) to scan with the new version.
 
 ## Running Scans
 
