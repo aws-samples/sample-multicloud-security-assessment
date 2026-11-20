@@ -34,3 +34,8 @@ archive
 
 # Exclude entire .ash folder
 .ash/
+
+# Python bytecode / test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
