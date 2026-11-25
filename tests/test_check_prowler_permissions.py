@@ -76,7 +76,7 @@ EXCEPTIONS = {"securityhub:batchimportfindings": "scoped to the Prowler product"
 def load(text: str) -> dict:
     import yaml
 
-    return yaml.load(text, Loader=cpp.CfnLoader)
+    return yaml.load(text, Loader=cpp.CfnLoader)  # nosec B506 - SafeLoader subclass
 
 
 def policy(template: dict) -> list:
